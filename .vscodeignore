@@ -1,0 +1,12 @@
+.vscode/**
+.vscode-test/**
+.gitignore
+tsconfig.json
+**/*.map
+node_modules/@types/**
+node_modules/typescript/**
+node_modules/@vscode/vsce/**
+src/orchestrator/**
+src/panels/**
+src/extension.ts
+src/types.ts

@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Subagents</title>
+<style>
+  :root {
+    --bg:        #1e1e2e;
+    --surface:   #2a2a3e;
+    --border:    #3a3a5c;
+    --accent:    #7c6af7;
+    --accent2:   #5eead4;
+    --text:      #cdd6f4;
+    --muted:     #6c7086;
+    --ok:        #a6e3a1;
+    --err:       #f38ba8;
+    --warn:      #f9e2af;
+    --running:   #89b4fa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Top bar ── */
+  #topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #topbar h1 { font-size: 14px; font-weight: 600; color: var(--accent); flex: 1; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: opacity .15s;
+  }
+  button:hover { opacity: .85; }
+  button.secondary {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  button.danger { background: var(--err); color: #1e1e2e; }
+
+  /* ── Main layout ── */
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Graph canvas ── */
+  #graph-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  #graph-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    cursor: grab;
+  }
+  #graph-canvas:active { cursor: grabbing; }
+  #empty-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  #empty-hint .big { font-size: 40px; }
+  #empty-hint p { font-size: 14px; }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: 320px;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  #sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .stab {
+    flex: 1;
+    padding: 8px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all .15s;
+  }
+  .stab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: rgba(124,106,247,.08);
+  }
+  #sidebar-body { flex: 1; overflow-y: auto; padding: 12px; }
+
+  /* ── Agent detail ── */
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .detail-header .agent-icon {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .detail-title { font-weight: 600; }
+  .detail-subtitle { color: var(--muted); font-size: 11px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .badge.idle      { background: var(--border); color: var(--muted); }
+  .badge.running   { background: rgba(137,180,250,.2); color: var(--running); }
+  .badge.done      { background: rgba(166,227,161,.2); color: var(--ok); }
+  .badge.error     { background: rgba(243,139,168,.2); color: var(--err); }
+  .badge.cancelled { background: rgba(249,226,175,.2); color: var(--warn); }
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 10px 0 4px;
+    letter-spacing: .06em;
+  }
+  .output-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+    color: var(--text);
+  }
+  .output-box.stream { color: var(--running); }
+  .powers-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .power-chip {
+    background: rgba(94,234,212,.1);
+    border: 1px solid rgba(94,234,212,.3);
+    color: var(--accent2);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+  }
+  #no-selection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 8px;
+    color: var(--muted);
+  }
+  #no-selection .icon { font-size: 32px; }
+
+  /* ── Run panel ── */
+  .run-section { margin-bottom: 14px; }
+  .run-section label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 12px; }
+  select, textarea, input[type=text] {
+    width: 100%;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .15s;
+  }
+  select:focus, textarea:focus, input[type=text]:focus {
+    border-color: var(--accent);
+  }
+  textarea { resize: vertical; min-height: 80px; }
+  .checkbox-row {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 5px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .checkbox-row input { width: auto; }
+
+  /* ── Log panel ── */
+  #log-area {
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.7;
+  }
+  .log-line { padding: 1px 0; }
+  .log-line.info  { color: var(--text); }
+  .log-line.warn  { color: var(--warn); }
+  .log-line.error { color: var(--err); }
+
+  /* ── Scrollbars ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Spinner ── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--running);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <h1>⬡ Claude Subagents</h1>
+  <button onclick="switchTab('run')">+ Run Agent</button>
+  <button onclick="switchTab('create')">✦ New Agent</button>
+  <button class="danger secondary" onclick="clearGraph()">Clear</button>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- GRAPH -->
+  <div id="graph-wrap">
+    <canvas id="graph-canvas"></canvas>
+    <div id="empty-hint" id="hint">
+      <span class="big">⬡</span>
+      <p>No agents yet — run a task to get started</p>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div id="sidebar-tabs">
+      <div class="stab active" id="tab-detail" onclick="switchTab('detail')">Detail</div>
+      <div class="stab" id="tab-run"    onclick="switchTab('run')">Run</div>
+      <div class="stab" id="tab-create" onclick="switchTab('create')">Create</div>
+      <div class="stab" id="tab-log"    onclick="switchTab('log')">Log</div>
+    </div>
+
+    <div id="sidebar-body">
+
+      <!-- DETAIL TAB -->
+      <div id="panel-detail">
+        <div id="no-selection">
+          <span class="icon">↖</span>
+          <span>Click a node to inspect it</span>
+        </div>
+        <div id="agent-detail" style="display:none"></div>
+      </div>
+
+      <!-- RUN TAB -->
+      <div id="panel-run" style="display:none">
+        <div class="run-section">
+          <label>Agent type</label>
+          <select id="run-type">
+            <option value="planner">🗺 Planner — breaks task into subagents</option>
+            <option value="code-review">🔍 Code Reviewer</option>
+            <option value="researcher">🌐 Researcher (uses web)</option>
+            <option value="coder">💻 Coder (reads/writes files)</option>
+            <option value="summarizer">📋 Summarizer</option>
+          </select>
+        </div>
+        <div class="run-section" id="custom-agent-section" style="display:none">
+          <label>Custom agent</label>
+          <select id="run-custom-select"></select>
+        </div>
+        <div class="run-section">
+          <label>Model</label>
+          <select id="run-model">
+            <option value="">Default (Claude Code setting)</option>
+            <option value="claude-opus-4-6">Opus 4.6 — most capable</option>
+            <option value="claude-sonnet-4-6">Sonnet 4.6 — balanced</option>
+            <option value="claude-haiku-4-5-20251001">Haiku 4.5 — fastest</option>
+          </select>
+        </div>
+        <div class="run-section">
+          <label>Input / Prompt</label>
+          <textarea id="run-input" placeholder="Describe the task…"></textarea>
+        </div>
+        <button style="width:100%" onclick="submitRun()">▶ Run</button>
+      </div>
+
+      <!-- CREATE TAB -->
+      <div id="panel-create" style="display:none">
+        <div class="run-section">
+          <label>Agent name</label>
+          <input type="text" id="create-name" placeholder="e.g. Documentation Writer">
+        </div>
+        <div class="run-section">
+          <label>System prompt</label>
+          <textarea id="create-prompt" style="min-height:120px"
+            placeholder="You are an expert documentation writer. When given code, produce clear, concise docs..."></textarea>
+        </div>
+        <div class="run-section">
+          <label>Model</label>
+          <select id="create-model">
+            <option value="">Default (Claude Code setting)</option>
+            <option value="claude-opus-4-6">Opus 4.6 — most capable</option>
+            <option value="claude-sonnet-4-6">Sonnet 4.6 — balanced</option>
+            <option value="claude-haiku-4-5-20251001">Haiku 4.5 — fastest</option>
+          </select>
+        </div>
+        <div class="run-section">
+          <label>Superpowers</label>
+          <label class="checkbox-row"><input type="checkbox" value="files"> 📁 Files (read/write/edit)</label>
+          <label class="checkbox-row"><input type="checkbox" value="terminal"> 💻 Terminal (bash)</label>
+          <label class="checkbox-row"><input type="checkbox" value="web"> 🌐 Web search & fetch</label>
+          <label class="checkbox-row"><input type="checkbox" value="todos"> ✅ Todo management</label>
+        </div>
+        <button style="width:100%" onclick="submitCreate()">✦ Create Agent</button>
+        <div id="create-feedback" style="margin-top:8px;color:var(--ok);font-size:12px;display:none"></div>
+      </div>
+
+      <!-- LOG TAB -->
+      <div id="panel-log" style="display:none">
+        <div id="log-area"></div>
+      </div>
+
+    </div><!-- sidebar-body -->
+  </div><!-- sidebar -->
+</div><!-- main -->
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// VS Code API
+// ─────────────────────────────────────────────────────────────────────────────
+const vscode = acquireVsCodeApi();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+const nodes = new Map();   // id → AgentNode
+const edges = [];          // {from, to}
+let selectedId = null;
+let customAgents = [];
+
+// Graph layout
+const nodeRadius = 30;
+const layout = new Map(); // id → {x, y, vx, vy}
+
+// Canvas pan/zoom
+let camX = 0, camY = 0, camScale = 1;
+let isDragging = false, dragStart = null, dragNodeId = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Canvas setup
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('graph-canvas');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('graph-wrap');
+
+function resizeCanvas() {
+  canvas.width = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+  draw();
+}
+
+const ro = new ResizeObserver(resizeCanvas);
+ro.observe(wrap);
+resizeCanvas();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Colors / icons per agent type & status
+// ─────────────────────────────────────────────────────────────────────────────
+const TYPE_ICONS = {
+  planner:      '🗺',
+  'code-review':'🔍',
+  researcher:   '🌐',
+  coder:        '💻',
+  summarizer:   '📋',
+  custom:       '✦',
+};
+const STATUS_COLOR = {
+  idle:      '#3a3a5c',
+  running:   '#89b4fa',
+  done:      '#a6e3a1',
+  error:     '#f38ba8',
+  cancelled: '#f9e2af',
+};
+const STATUS_BG = {
+  idle:      'rgba(58,58,92,.4)',
+  running:   'rgba(137,180,250,.15)',
+  done:      'rgba(166,227,161,.15)',
+  error:     'rgba(243,139,168,.15)',
+  cancelled: 'rgba(249,226,175,.15)',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layout — simple force-directed
+// ─────────────────────────────────────────────────────────────────────────────
+function getOrCreatePos(id) {
+  if (!layout.has(id)) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = 80 + Math.random() * 120;
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    layout.set(id, { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r, vx: 0, vy: 0 });
+  }
+  return layout.get(id);
+}
+
+function tickPhysics() {
+  const ids = [...nodes.keys()];
+  if (ids.length === 0) return;
+
+  // Repulsion between all pairs
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const a = layout.get(ids[i]);
+      const b = layout.get(ids[j]);
+      if (!a || !b) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const force = 8000 / (dist * dist);
+      const fx = (dx / dist) * force, fy = (dy / dist) * force;
+      a.vx -= fx; a.vy -= fy;
+      b.vx += fx; b.vy += fy;
+    }
+  }
+
+  // Attraction along edges
+  for (const { from, to } of edges) {
+    const a = layout.get(from), b = layout.get(to);
+    if (!a || !b) continue;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const ideal = 160;
+    const force = (dist - ideal) * 0.03;
+    const fx = (dx / dist) * force, fy = (dy / dist) * force;
+    a.vx += fx; a.vy += fy;
+    b.vx -= fx; b.vy -= fy;
+  }
+
+  // Gravity toward centre
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  for (const id of ids) {
+    const p = layout.get(id);
+    if (!p) continue;
+    p.vx += (cx - p.x) * 0.003;
+    p.vy += (cy - p.y) * 0.003;
+    // Damping
+    p.vx *= 0.85; p.vy *= 0.85;
+    p.x += p.vx; p.y += p.vy;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Draw
+// ─────────────────────────────────────────────────────────────────────────────
+function draw() {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Show/hide empty hint
+  document.getElementById('empty-hint').style.display = nodes.size === 0 ? 'flex' : 'none';
+
+  ctx.save();
+  ctx.translate(camX, camY);
+  ctx.scale(camScale, camScale);
+
+  // Draw edges
+  for (const { from, to } of edges) {
+    const a = layout.get(from), b = layout.get(to);
+    if (!a || !b) continue;
+
+    // Arrow from edge of source circle to edge of target
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const sx = a.x + (dx / dist) * nodeRadius;
+    const sy = a.y + (dy / dist) * nodeRadius;
+    const ex = b.x - (dx / dist) * (nodeRadius + 6);
+    const ey = b.y - (dy / dist) * (nodeRadius + 6);
+
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.strokeStyle = '#3a3a5c';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Arrowhead
+    const angle = Math.atan2(dy, dx);
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - 8 * Math.cos(angle - 0.4), ey - 8 * Math.sin(angle - 0.4));
+    ctx.lineTo(ex - 8 * Math.cos(angle + 0.4), ey - 8 * Math.sin(angle + 0.4));
+    ctx.closePath();
+    ctx.fillStyle = '#3a3a5c';
+    ctx.fill();
+  }
+
+  // Draw nodes
+  for (const [id, node] of nodes) {
+    const pos = layout.get(id);
+    if (!pos) continue;
+
+    const isSelected = id === selectedId;
+    const statusColor = STATUS_COLOR[node.status] || '#3a3a5c';
+    const statusBg = STATUS_BG[node.status] || 'rgba(58,58,92,.4)';
+
+    // Glow for selected
+    if (isSelected) {
+      ctx.save();
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#7c6af7';
+    }
+
+    // Circle background
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, nodeRadius, 0, Math.PI * 2);
+    ctx.fillStyle = statusBg;
+    ctx.fill();
+    ctx.strokeStyle = isSelected ? '#7c6af7' : statusColor;
+    ctx.lineWidth = isSelected ? 2.5 : 1.5;
+    ctx.stroke();
+
+    if (isSelected) ctx.restore();
+
+    // Running pulse ring
+    if (node.status === 'running') {
+      const t = (Date.now() % 1500) / 1500;
+      const r = nodeRadius + 8 + t * 14;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(137,180,250,${0.4 * (1 - t)})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // Icon
+    ctx.font = '18px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(TYPE_ICONS[node.type] || '⬡', pos.x, pos.y - 2);
+
+    // Name label below node
+    ctx.font = '600 10px Segoe UI, system-ui';
+    ctx.fillStyle = '#cdd6f4';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const label = node.name.length > 14 ? node.name.slice(0, 13) + '…' : node.name;
+    ctx.fillText(label, pos.x, pos.y + nodeRadius + 4);
+
+    // Status dot
+    ctx.beginPath();
+    ctx.arc(pos.x + nodeRadius - 7, pos.y - nodeRadius + 7, 5, 0, Math.PI * 2);
+    ctx.fillStyle = statusColor;
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// Animation loop
+let rafId;
+function animate() {
+  tickPhysics();
+  draw();
+  rafId = requestAnimationFrame(animate);
+}
+animate();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Canvas mouse interaction
+// ─────────────────────────────────────────────────────────────────────────────
+function screenToWorld(x, y) {
+  return { x: (x - camX) / camScale, y: (y - camY) / camScale };
+}
+
+function hitTest(wx, wy) {
+  for (const [id] of nodes) {
+    const pos = layout.get(id);
+    if (!pos) continue;
+    const dx = wx - pos.x, dy = wy - pos.y;
+    if (dx * dx + dy * dy <= nodeRadius * nodeRadius) return id;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousedown', e => {
+  const w = screenToWorld(e.offsetX, e.offsetY);
+  const hit = hitTest(w.x, w.y);
+  if (hit) {
+    dragNodeId = hit;
+    selectNode(hit);
+  } else {
+    isDragging = true;
+    dragStart = { x: e.offsetX - camX, y: e.offsetY - camY };
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (dragNodeId) {
+    const w = screenToWorld(e.offsetX, e.offsetY);
+    const pos = layout.get(dragNodeId);
+    if (pos) { pos.x = w.x; pos.y = w.y; pos.vx = 0; pos.vy = 0; }
+  } else if (isDragging && dragStart) {
+    camX = e.offsetX - dragStart.x;
+    camY = e.offsetY - dragStart.y;
+  }
+});
+
+canvas.addEventListener('mouseup', () => {
+  isDragging = false;
+  dragNodeId = null;
+  dragStart = null;
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  const mx = e.offsetX, my = e.offsetY;
+  camX = mx - (mx - camX) * factor;
+  camY = my - (my - camY) * factor;
+  camScale *= factor;
+  camScale = Math.min(3, Math.max(0.2, camScale));
+}, { passive: false });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Node selection → sidebar
+// ─────────────────────────────────────────────────────────────────────────────
+function selectNode(id) {
+  selectedId = id;
+  switchTab('detail');
+  renderDetail();
+}
+
+function renderDetail() {
+  const detail = document.getElementById('agent-detail');
+  const noSel = document.getElementById('no-selection');
+
+  if (!selectedId || !nodes.has(selectedId)) {
+    detail.style.display = 'none';
+    noSel.style.display = 'flex';
+    return;
+  }
+
+  const node = nodes.get(selectedId);
+  noSel.style.display = 'none';
+  detail.style.display = 'block';
+
+  const duration = node.endTime && node.startTime
+    ? ((node.endTime - node.startTime) / 1000).toFixed(1) + 's'
+    : node.startTime ? 'running…' : '—';
+
+  const outputHtml = node.streamBuffer
+    ? `<div class="section-label">Streaming…</div><div class="output-box stream">${esc(node.streamBuffer)}</div>`
+    : node.output
+    ? `<div class="section-label">Output</div><div class="output-box">${esc(node.output)}</div>`
+    : '';
+
+  const errorHtml = node.error
+    ? `<div class="section-label">Error</div><div class="output-box" style="color:var(--err)">${esc(node.error)}</div>`
+    : '';
+
+  const powersHtml = (node.powers || []).filter(p => p !== 'none').length > 0
+    ? `<div class="section-label">Superpowers</div>
+       <div class="powers-list">${node.powers.filter(p=>p!=='none').map(p=>`<span class="power-chip">${p}</span>`).join('')}</div>`
+    : '';
+
+  const cancelBtn = node.status === 'running'
+    ? `<button class="danger" style="margin-top:10px;width:100%" onclick="cancelAgent('${node.id}')">✕ Cancel</button>`
+    : '';
+
+  detail.innerHTML = `
+    <div class="detail-header">
+      <div class="agent-icon" style="background:${STATUS_BG[node.status]};border:1.5px solid ${STATUS_COLOR[node.status]}">
+        ${TYPE_ICONS[node.type] || '⬡'}
+      </div>
+      <div>
+        <div class="detail-title">${esc(node.name)}</div>
+        <div class="detail-subtitle">${node.type} · ${duration}</div>
+      </div>
+      <span class="badge ${node.status}">${node.status}</span>
+    </div>
+    ${powersHtml}
+    ${node.input ? `<div class="section-label">Input</div><div class="output-box">${esc(node.input.slice(0,400))}${node.input.length>400?'…':''}</div>` : ''}
+    ${outputHtml}
+    ${errorHtml}
+    ${cancelBtn}
+  `;
+}
+
+function esc(str) {
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab switching
+// ─────────────────────────────────────────────────────────────────────────────
+const TABS = ['detail', 'run', 'create', 'log'];
+function switchTab(name) {
+  for (const t of TABS) {
+    document.getElementById('panel-' + t).style.display = t === name ? 'block' : 'none';
+    document.getElementById('tab-' + t).classList.toggle('active', t === name);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Run panel
+// ─────────────────────────────────────────────────────────────────────────────
+function submitRun() {
+  const typeEl = document.getElementById('run-type');
+  const inputEl = document.getElementById('run-input');
+  const modelEl = document.getElementById('run-model');
+  const agentType = typeEl.value;
+  const input = inputEl.value.trim();
+  const model = modelEl.value || undefined;
+  if (!input) { alert('Please enter a prompt.'); return; }
+
+  vscode.postMessage({ type: 'runAgent', agentType, input, model });
+  inputEl.value = '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Create panel
+// ─────────────────────────────────────────────────────────────────────────────
+function submitCreate() {
+  const name = document.getElementById('create-name').value.trim();
+  const systemPrompt = document.getElementById('create-prompt').value.trim();
+  if (!name || !systemPrompt) { alert('Name and system prompt are required.'); return; }
+
+  const powers = [...document.querySelectorAll('#panel-create input[type=checkbox]:checked')]
+    .map(cb => cb.value);
+  if (powers.length === 0) powers.push('none');
+
+  const model = document.getElementById('create-model').value || undefined;
+
+  vscode.postMessage({
+    type: 'createAgent',
+    config: { name, type: 'custom', systemPrompt, powers, model }
+  });
+
+  // Reset form
+  document.getElementById('create-name').value = '';
+  document.getElementById('create-prompt').value = '';
+  document.querySelectorAll('#panel-create input[type=checkbox]').forEach(cb => cb.checked = false);
+
+  const fb = document.getElementById('create-feedback');
+  fb.textContent = `Agent "${name}" created!`;
+  fb.style.display = 'block';
+  setTimeout(() => fb.style.display = 'none', 3000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Graph actions
+// ─────────────────────────────────────────────────────────────────────────────
+function clearGraph() {
+  if (!confirm('Clear all agents and reset the graph?')) return;
+  vscode.postMessage({ type: 'clearGraph' });
+}
+
+function cancelAgent(id) {
+  vscode.postMessage({ type: 'cancelAgent', id });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Log
+// ─────────────────────────────────────────────────────────────────────────────
+function appendLog(text, level) {
+  const area = document.getElementById('log-area');
+  const line = document.createElement('div');
+  line.className = 'log-line ' + level;
+  const now = new Date().toLocaleTimeString();
+  line.textContent = `[${now}] ${text}`;
+  area.appendChild(line);
+  area.scrollTop = area.scrollHeight;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Extension message handler
+// ─────────────────────────────────────────────────────────────────────────────
+window.addEventListener('message', e => {
+  const msg = e.data;
+  switch (msg.type) {
+    case 'addNode': {
+      nodes.set(msg.node.id, msg.node);
+      getOrCreatePos(msg.node.id);
+      if (selectedId === msg.node.id) renderDetail();
+      break;
+    }
+    case 'updateNode': {
+      const n = nodes.get(msg.id);
+      if (n) {
+        Object.assign(n, msg.patch);
+        if (selectedId === msg.id) renderDetail();
+      }
+      break;
+    }
+    case 'addEdge': {
+      if (!edges.find(e => e.from === msg.from && e.to === msg.to)) {
+        edges.push({ from: msg.from, to: msg.to });
+      }
+      break;
+    }
+    case 'clear': {
+      nodes.clear();
+      edges.length = 0;
+      layout.clear();
+      selectedId = null;
+      renderDetail();
+      break;
+    }
+    case 'log': {
+      appendLog(msg.text, msg.level);
+      break;
+    }
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Boot — tell extension we're ready so it can replay state
+// ─────────────────────────────────────────────────────────────────────────────
+vscode.postMessage({ type: 'ready' });
+
+// Builtin agents injected at render time
+const BUILTIN_AGENTS = __BUILTIN_AGENTS__;
+</script>
+</body>
+</html>

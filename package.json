@@ -1,0 +1,82 @@
+{
+  "name": "claude-subagents",
+  "displayName": "Claude Subagents",
+  "description": "Visualise and orchestrate Claude subagents — plan, review code, research, and more",
+  "version": "0.1.0",
+  "publisher": "achibold",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeSubagents.openPanel",
+        "title": "Claude: Open Subagents Panel",
+        "icon": "$(circuit-board)"
+      },
+      {
+        "command": "claudeSubagents.runPlanner",
+        "title": "Claude: Plan Task with Subagents"
+      },
+      {
+        "command": "claudeSubagents.reviewCode",
+        "title": "Claude: Review Code with Subagents"
+      },
+      {
+        "command": "claudeSubagents.createAgent",
+        "title": "Claude: Create Custom Agent"
+      },
+      {
+        "command": "claudeSubagents.clearGraph",
+        "title": "Claude: Clear Agent Graph"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "claudeSubagents.reviewCode",
+          "when": "editorHasSelection",
+          "group": "9_claude@1"
+        },
+        {
+          "command": "claudeSubagents.runPlanner",
+          "group": "9_claude@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "claudeSubagents.openPanel",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "claudeSubagents.openPanel",
+        "key": "ctrl+shift+u",
+        "mac": "cmd+shift+u"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@homebridge/node-pty-prebuilt-multiarch": "^0.13.1"
+  }
+}
