@@ -31,30 +31,32 @@ function stripAnsi(str: string): string {
     .replace(/\r/g, '');
 }
 
+/** Known UI chrome lines to strip from final output */
+const CHROME_PATTERNS = [
+  /^Welcome back .+!$/,
+  /Claude Code v\d/,
+  /Tips for getting started/,
+  /Run \/init/,
+  /Voice mode is now/,
+  /Recent activity/,
+  /No recent activity/,
+  /^\s*>\s*$/,
+  /^[▐▛▜▝▞▟█▘▙╭╮╰╯│]+\s*$/,  // pure box-drawing lines
+  /^─{10,}$/,                   // long separator lines only
+  /Pollinating…|Bloviating…|Ruminating…|Cogitating…|Contemplating…/,
+  /Deliberating…|Meditating…|Pondering…|Perambulating…|Theorizing…/,
+  /esc to interrupt/i,
+  /Do you want to proceed/i,
+  /Use skill ".*:.*"\?/,
+];
+
 function cleanOutput(raw: string): string {
   return stripAnsi(raw)
     .split('\n')
     .filter(line => {
       const l = line.trim();
       if (!l) return false;
-      // Only remove lines that are PURELY decorative (no real text content)
-      if (l.match(/^[▐▛▜▝▞▟█▘▙╭╰│─┼·✻\s]+$/)) return false;
-      if (l.includes('Welcome back') && l.includes('!')) return false;
-      if (l.match(/Claude Code v\d/)) return false;
-      if (l.includes('Tips for getting started')) return false;
-      if (l.includes('Run /init')) return false;
-      if (l.includes('Voice mode is now')) return false;
-      if (l.includes('Recent activity')) return false;
-      if (l.includes('No recent activity')) return false;
-      if (l.match(/^\s*>\s*$/)) return false;
-      if (l.match(/^\?\s/)) return false;
-      if (l.includes('Accessing workspace')) return false;
-      const flat = l.replace(/\s/g, '').toLowerCase();
-      if (flat.includes('quicksafetycheck')) return false;
-      if (flat.includes('trustthisfolder')) return false;
-      if (flat.includes('securityguide')) return false;
-      if (flat.includes('entertoconfirm')) return false;
-      return true;
+      return !CHROME_PATTERNS.some(p => p.test(l));
     })
     .join('\n')
     .trim();
@@ -75,6 +77,7 @@ export async function runAgent(
 ): Promise<RunResult> {
   return new Promise((resolve) => {
     const claudeArgs = [
+      '--dangerously-skip-permissions',
       '--system-prompt', config.systemPrompt,
       ...buildAllowedTools(config),
       ...(config.model ? ['--model', config.model] : []),
@@ -97,6 +100,7 @@ export async function runAgent(
     let firstDataReceived = false;
     let finished = false;
     let trustConfirmed = false;
+    let bypassConfirmed = false;
 
     const finish = () => {
       if (finished) return;
@@ -116,26 +120,28 @@ export async function runAgent(
       silenceTimer = setTimeout(finish, 10000);
     };
 
-    const NOISE = ['Welcome back', 'Accessing workspace', 'Quick safety check',
-      'trust this folder', 'Claude Code\'ll be able', 'Security guide',
-      'Yes, I trust', 'No, exit', 'Enter to confirm', 'Voice mode'];
-
     term.onData((data: string) => {
       rawOutput += data;
       const clean = stripAnsi(data);
-      const isNoise = NOISE.some(n => clean.includes(n) || clean.replace(/\s/g,'').toLowerCase().includes(n.replace(/\s/g,'').toLowerCase()));
-      if (clean.trim() && !isNoise) opts.onStream?.(clean);
+      // Only suppress spinner animation chunks from streaming — let everything else through
+      const isSpinner = /(?:Pollinating|Bloviating|Ruminating|Cogitating|Contemplating|Deliberating|Meditating|Pondering|Perambulating|Theorizing)/.test(clean);
+      if (clean.trim() && !isSpinner) opts.onStream?.(clean);
       resetSilence();
 
-      // Auto-confirm the workspace trust prompt (only once, with delay)
-      // Spaces may be ANSI cursor movements, so compare without whitespace
-      if (!trustConfirmed) {
-        const flat = stripAnsi(rawOutput).replace(/\s/g, '').toLowerCase();
-        if (flat.includes('trustthisfolder') || flat.includes('quicksafetycheck')) {
-          trustConfirmed = true;
-          // Option 1 (trust) is pre-selected — just press Enter to confirm
-          setTimeout(() => term.write('\r'), 300);
-        }
+      const flat = stripAnsi(rawOutput).replace(/\s/g, '').toLowerCase();
+      // Workspace trust prompt — option 1 pre-selected, just press Enter
+      if (!trustConfirmed && (flat.includes('trustthisfolder') || flat.includes('quicksafetycheck'))) {
+        trustConfirmed = true;
+        setTimeout(() => term.write('\r'), 300);
+      }
+      // Bypass permissions warning — option 1 is "No, exit", option 2 is "Yes, I accept"
+      // Navigate down to option 2 then press Enter
+      if (!bypassConfirmed && flat.includes('bypasspermissions')) {
+        bypassConfirmed = true;
+        setTimeout(() => {
+          term.write('\x1B[B'); // down arrow → select option 2
+          setTimeout(() => term.write('\r'), 150); // Enter to confirm
+        }, 400);
       }
 
       // On first data: wait 1.5s for banner to finish, then send prompt

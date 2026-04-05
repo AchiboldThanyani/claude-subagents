@@ -1,67 +1,47 @@
 {
   "name": "claude-subagents",
   "displayName": "Claude Subagents",
-  "description": "Visualise and orchestrate Claude subagents — plan, review code, research, and more",
-  "version": "0.1.0",
+  "description": "Visualise and orchestrate Claude subagents — plan, review, test, document and more",
+  "version": "0.2.0",
   "publisher": "achibold",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
-  "categories": [
-    "Other",
-    "Machine Learning"
-  ],
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other", "Machine Learning"],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "claudeSubagents.openPanel",
-        "title": "Claude: Open Subagents Panel",
-        "icon": "$(circuit-board)"
-      },
-      {
-        "command": "claudeSubagents.runPlanner",
-        "title": "Claude: Plan Task with Subagents"
-      },
-      {
-        "command": "claudeSubagents.reviewCode",
-        "title": "Claude: Review Code with Subagents"
-      },
-      {
-        "command": "claudeSubagents.createAgent",
-        "title": "Claude: Create Custom Agent"
-      },
-      {
-        "command": "claudeSubagents.clearGraph",
-        "title": "Claude: Clear Agent Graph"
-      }
+      { "command": "claudeSubagents.openPanel",    "title": "Claude: Open Subagents Panel",        "icon": "$(circuit-board)" },
+      { "command": "claudeSubagents.runPlanner",   "title": "Claude: Plan Task with Subagents" },
+      { "command": "claudeSubagents.reviewCode",   "title": "Claude: Review Code" },
+      { "command": "claudeSubagents.writeTests",   "title": "Claude: Write Tests" },
+      { "command": "claudeSubagents.writeDocs",    "title": "Claude: Write Docs" },
+      { "command": "claudeSubagents.findBugs",     "title": "Claude: Find Bugs" },
+      { "command": "claudeSubagents.gitCommit",    "title": "Claude: Write Git Commit Message" },
+      { "command": "claudeSubagents.refactor",     "title": "Claude: Refactor Code" },
+      { "command": "claudeSubagents.createAgent",  "title": "Claude: Create Custom Agent" },
+      { "command": "claudeSubagents.openHistory",  "title": "Claude: Open Agent History" },
+      { "command": "claudeSubagents.clearGraph",   "title": "Claude: Clear Agent Graph" }
     ],
     "menus": {
       "editor/context": [
-        {
-          "command": "claudeSubagents.reviewCode",
-          "when": "editorHasSelection",
-          "group": "9_claude@1"
-        },
-        {
-          "command": "claudeSubagents.runPlanner",
-          "group": "9_claude@2"
-        }
+        { "command": "claudeSubagents.reviewCode", "group": "9_claude@1" },
+        { "command": "claudeSubagents.writeTests", "group": "9_claude@2" },
+        { "command": "claudeSubagents.writeDocs",  "group": "9_claude@3" },
+        { "command": "claudeSubagents.findBugs",   "group": "9_claude@4" },
+        { "command": "claudeSubagents.refactor",   "when": "editorHasSelection", "group": "9_claude@5" },
+        { "command": "claudeSubagents.runPlanner", "group": "9_claude@6" }
       ],
       "editor/title": [
-        {
-          "command": "claudeSubagents.openPanel",
-          "group": "navigation"
-        }
+        { "command": "claudeSubagents.openPanel",  "group": "navigation" }
+      ],
+      "scm/title": [
+        { "command": "claudeSubagents.gitCommit",  "group": "inline" }
       ]
     },
     "keybindings": [
-      {
-        "command": "claudeSubagents.openPanel",
-        "key": "ctrl+shift+u",
-        "mac": "cmd+shift+u"
-      }
+      { "command": "claudeSubagents.openPanel",  "key": "ctrl+shift+u", "mac": "cmd+shift+u" },
+      { "command": "claudeSubagents.reviewCode", "key": "ctrl+shift+r", "mac": "cmd+shift+r" },
+      { "command": "claudeSubagents.findBugs",   "key": "ctrl+shift+b", "mac": "cmd+shift+b" }
     ]
   },
   "scripts": {

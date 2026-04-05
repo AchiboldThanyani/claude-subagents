@@ -1,17 +1,13 @@
 import { EventEmitter } from 'events';
-import { AgentConfig, AgentNode, AgentStatus, AgentType, ExtToWebMsg } from '../types';
+import { AgentConfig, AgentNode, AgentType, EditorContext, ExtToWebMsg } from '../types';
 import { runAgent } from './AgentRunner';
 import { BUILTIN_AGENTS, PLANNER_AGENT } from './builtinAgents';
+import { ContextManager } from '../context/ContextManager';
+import { HistoryManager } from '../history/HistoryManager';
 
 function makeId(): string {
-  // crypto.randomUUID is available in Node 16+
   return (crypto as unknown as { randomUUID: () => string }).randomUUID?.() ??
-    Math.random().toString(36).slice(2);
-}
-
-export interface OrchestratorEvents {
-  message: (msg: ExtToWebMsg) => void;
-  log: (text: string, level: 'info' | 'warn' | 'error') => void;
+    Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
 interface PlanTask {
@@ -28,160 +24,162 @@ interface Plan {
   tasks: PlanTask[];
 }
 
-/**
- * Core orchestration engine.
- * Manages the agent graph, spawns subagents, handles dependencies.
- */
 export class Orchestrator extends EventEmitter {
   private nodes = new Map<string, AgentNode>();
   private abortControllers = new Map<string, AbortController>();
-  /** User-created custom agents */
   private customAgents: AgentConfig[] = [];
+  private scheduledJobs = new Map<string, ReturnType<typeof setInterval>>();
+  private activeCount = 0;
+  history: HistoryManager;
 
-  // ── Public API ────────────────────────────────────────────────────────────
-
-  getNodes(): AgentNode[] {
-    return [...this.nodes.values()];
+  constructor(historyManager: HistoryManager) {
+    super();
+    this.history = historyManager;
   }
 
-  getCustomAgents(): AgentConfig[] {
-    return [...this.customAgents];
-  }
+  // ── Public API ─────────────────────────────────────────────────────────────
+
+  getNodes(): AgentNode[] { return [...this.nodes.values()]; }
+  getCustomAgents(): AgentConfig[] { return [...this.customAgents]; }
 
   addCustomAgent(config: Omit<AgentConfig, 'id'>): AgentConfig {
     const agent: AgentConfig = { ...config, id: makeId() };
     this.customAgents.push(agent);
     this.log(`Custom agent "${agent.name}" registered`, 'info');
+    this.emitAgentList();
     return agent;
   }
 
   clear(): void {
-    // cancel everything running
-    for (const [id, ctrl] of this.abortControllers) {
-      ctrl.abort();
-      this.abortControllers.delete(id);
-    }
+    for (const [, ctrl] of this.abortControllers) ctrl.abort();
+    this.abortControllers.clear();
     this.nodes.clear();
+    this.activeCount = 0;
     this.emit('message', { type: 'clear' } satisfies ExtToWebMsg);
+    this.emitActiveCount();
   }
 
   cancelAgent(id: string): void {
     this.abortControllers.get(id)?.abort();
   }
 
-  /**
-   * Run a named built-in agent type directly (without planning).
-   */
-  async runDirect(agentType: AgentType, input: string, parentId?: string, model?: string): Promise<AgentNode> {
+  async runDirect(
+    agentType: AgentType,
+    input: string,
+    parentId?: string,
+    model?: string,
+    ctx?: EditorContext
+  ): Promise<AgentNode> {
     const template = BUILTIN_AGENTS.find(a => a.type === agentType) ??
       this.customAgents.find(a => a.type === agentType);
-
-    if (!template) {
-      throw new Error(`No agent found for type "${agentType}"`);
-    }
-
+    if (!template) throw new Error(`No agent found for type "${agentType}"`);
     const config: AgentConfig = { ...template, id: makeId(), ...(model ? { model } : {}) };
-    return this.spawnAgent(config, input, parentId);
+    return this.spawnAgent(config, input, parentId, ctx);
   }
 
-  /**
-   * Run a custom agent by ID.
-   */
-  async runCustom(agentId: string, input: string, parentId?: string): Promise<AgentNode> {
+  async runCustom(
+    agentId: string,
+    input: string,
+    parentId?: string,
+    model?: string,
+    ctx?: EditorContext
+  ): Promise<AgentNode> {
     const config = this.customAgents.find(a => a.id === agentId);
     if (!config) throw new Error(`Custom agent ${agentId} not found`);
-    return this.spawnAgent(config, input, parentId);
+    const finalConfig = model ? { ...config, model } : config;
+    return this.spawnAgent(finalConfig, input, parentId, ctx);
   }
 
-  /**
-   * Full planner flow:
-   * 1. Run planner agent → get JSON plan
-   * 2. Spawn subagents respecting dependencies
-   * 3. Run a summarizer over all results
-   */
-  async runPlanner(task: string): Promise<void> {
-    const plannerId = makeId();
-    const plannerConfig: AgentConfig = {
-      ...PLANNER_AGENT,
-      id: plannerId,
-    };
-
-    // Create planner node
-    const plannerNode = this.createNode(plannerConfig, task);
-    this.updateNode(plannerId, { status: 'running', startTime: Date.now() });
-
+  async runPlanner(task: string, ctx?: EditorContext): Promise<void> {
+    const plannerConfig: AgentConfig = { ...PLANNER_AGENT, id: makeId() };
+    const contextBlock = ctx ? ContextManager.buildContextBlock(ctx) : '';
+    const plannerNode = this.createNode(plannerConfig, task, undefined, ctx);
+    this.updateNode(plannerNode.id, { status: 'running', startTime: Date.now() });
     this.log(`Planner starting: "${task}"`, 'info');
 
-    let planJson = '';
     const ctrl = new AbortController();
-    this.abortControllers.set(plannerId, ctrl);
+    this.abortControllers.set(plannerNode.id, ctrl);
+    this.bumpActive(1);
 
-    const result = await runAgent(plannerConfig, task, {
+    let planJson = '';
+    const result = await runAgent(plannerConfig, contextBlock + task, {
       signal: ctrl.signal,
       onStream: (chunk) => {
         planJson += chunk;
-        this.updateNode(plannerId, { streamBuffer: planJson });
+        this.updateNode(plannerNode.id, { streamBuffer: planJson });
       },
     });
 
-    this.abortControllers.delete(plannerId);
+    this.abortControllers.delete(plannerNode.id);
+    this.bumpActive(-1);
 
     if (!result.success) {
-      this.updateNode(plannerId, {
-        status: 'error',
-        error: result.error,
-        endTime: Date.now(),
-      });
-      this.log(`Planner failed: ${result.error}`, 'error');
+      this.updateNode(plannerNode.id, { status: 'error', error: result.error, endTime: Date.now() });
       return;
     }
 
-    // Parse the plan JSON
     let plan: Plan;
     try {
-      // Extract JSON block from response (might be wrapped in markdown)
       const jsonMatch = result.output.match(/\{[\s\S]*\}/);
       plan = JSON.parse(jsonMatch?.[0] ?? result.output) as Plan;
-    } catch (err) {
-      this.updateNode(plannerId, {
-        status: 'error',
-        output: result.output,
-        error: 'Failed to parse plan JSON',
-        endTime: Date.now(),
+    } catch {
+      this.updateNode(plannerNode.id, {
+        status: 'error', output: result.output,
+        error: 'Failed to parse plan JSON', endTime: Date.now(),
       });
-      this.log('Failed to parse plan JSON from planner', 'error');
       return;
     }
 
-    this.updateNode(plannerId, {
+    this.updateNode(plannerNode.id, {
       status: 'done',
       output: `Plan: ${plan.summary}\n\n${plan.tasks.length} tasks queued.`,
       endTime: Date.now(),
     });
 
-    this.log(`Plan ready: ${plan.summary} (${plan.tasks.length} tasks)`, 'info');
-
-    // Execute tasks respecting dependencies
-    await this.executePlan(plan, plannerId);
+    await this.executePlan(plan, plannerNode.id, ctx);
   }
 
-  // ── Private helpers ───────────────────────────────────────────────────────
+  scheduleAgent(agentType: AgentType, cronExpr: string, input: string): string {
+    const jobId = makeId();
+    const ms = this.cronToMs(cronExpr);
+    const interval = setInterval(() => {
+      this.runDirect(agentType, input).catch(err =>
+        this.log(`Scheduled agent error: ${err.message}`, 'error')
+      );
+    }, ms);
+    this.scheduledJobs.set(jobId, interval);
+    this.log(`Scheduled "${agentType}" every ${ms / 60000}min`, 'info');
+    return jobId;
+  }
 
-  private async executePlan(plan: Plan, parentId: string): Promise<void> {
-    // Map plan task IDs → node IDs
+  cancelSchedule(jobId: string): void {
+    const interval = this.scheduledJobs.get(jobId);
+    if (interval) {
+      clearInterval(interval);
+      this.scheduledJobs.delete(jobId);
+    }
+  }
+
+  emitAgentList(): void {
+    this.emit('message', {
+      type: 'agentList',
+      builtins: BUILTIN_AGENTS as Array<Omit<AgentConfig, 'id'>>,
+      custom: this.customAgents,
+    } satisfies ExtToWebMsg);
+  }
+
+  // ── Private ────────────────────────────────────────────────────────────────
+
+  private async executePlan(plan: Plan, parentId: string, ctx?: EditorContext): Promise<void> {
     const planIdToNodeId = new Map<string, string>();
-    // Track completed plan tasks
     const completed = new Set<string>();
-    // Results keyed by plan task ID
     const results = new Map<string, string>();
 
-    // Build initial nodes for all tasks
     for (const task of plan.tasks) {
       const template =
         BUILTIN_AGENTS.find(a => a.type === task.agentType) ??
         this.customAgents.find(a => a.type === task.agentType) ??
-        BUILTIN_AGENTS[0]; // fallback to planner template shape
-
+        BUILTIN_AGENTS[0];
       const config: AgentConfig = {
         ...template,
         id: makeId(),
@@ -189,34 +187,23 @@ export class Orchestrator extends EventEmitter {
         type: task.agentType,
         powers: task.powers ?? template.powers,
       };
-
-      const node = this.createNode(config, task.prompt, parentId);
+      const node = this.createNode(config, task.prompt, parentId, ctx);
       planIdToNodeId.set(task.id, node.id);
     }
 
-    // Wave-based execution — run all tasks whose deps are satisfied
     const remaining = new Set(plan.tasks.map(t => t.id));
 
     while (remaining.size > 0) {
-      // Find tasks ready to run
       const ready = plan.tasks.filter(t =>
-        remaining.has(t.id) &&
-        t.dependsOn.every(dep => completed.has(dep))
+        remaining.has(t.id) && t.dependsOn.every(dep => completed.has(dep))
       );
+      if (ready.length === 0) { this.log('Dependency deadlock — skipping remaining', 'warn'); break; }
 
-      if (ready.length === 0) {
-        // Deadlock — remaining tasks have unsatisfied deps
-        this.log('Dependency deadlock — remaining tasks skipped', 'warn');
-        break;
-      }
-
-      // Run this wave in parallel
       await Promise.all(ready.map(async (task) => {
         remaining.delete(task.id);
         const nodeId = planIdToNodeId.get(task.id)!;
         const node = this.nodes.get(nodeId)!;
 
-        // Inject upstream results into prompt if needed
         let prompt = task.prompt;
         if (task.dependsOn.length > 0) {
           const upstream = task.dependsOn
@@ -225,21 +212,16 @@ export class Orchestrator extends EventEmitter {
           prompt = `${prompt}\n\n---\nContext from prior steps:\n${upstream}`;
         }
 
-        const result = await this.runNodeAgent(node, prompt);
+        const result = await this.runNodeAgent(node, prompt, ctx);
         results.set(task.id, result.output ?? '');
         completed.add(task.id);
       }));
     }
 
-    // Final summarizer
     if (results.size > 0) {
       const summaryInput = [...results.entries()]
-        .map(([id, out]) => {
-          const task = plan.tasks.find(t => t.id === id);
-          return `### ${task?.name ?? id}\n${out}`;
-        })
+        .map(([id, out]) => `### ${plan.tasks.find(t => t.id === id)?.name ?? id}\n${out}`)
         .join('\n\n');
-
       await this.runDirect('summarizer', summaryInput, parentId);
     }
   }
@@ -247,22 +229,26 @@ export class Orchestrator extends EventEmitter {
   private async spawnAgent(
     config: AgentConfig,
     input: string,
-    parentId?: string
+    parentId?: string,
+    ctx?: EditorContext
   ): Promise<AgentNode> {
-    const node = this.createNode(config, input, parentId);
-    await this.runNodeAgent(node, input);
+    const node = this.createNode(config, input, parentId, ctx);
+    await this.runNodeAgent(node, input, ctx);
     return this.nodes.get(node.id)!;
   }
 
-  private async runNodeAgent(node: AgentNode, input: string): Promise<AgentNode> {
+  private async runNodeAgent(node: AgentNode, input: string, ctx?: EditorContext): Promise<AgentNode> {
     this.updateNode(node.id, { status: 'running', startTime: Date.now() });
-
     const ctrl = new AbortController();
     this.abortControllers.set(node.id, ctrl);
+    this.bumpActive(1);
+
+    // Prepend context block
+    const contextBlock = ctx ? ContextManager.buildContextBlock(ctx) : '';
+    const fullInput = contextBlock + input;
 
     let streamAccum = '';
-
-    const result = await runAgent(node, input, {
+    const result = await runAgent(node, fullInput, {
       signal: ctrl.signal,
       onStream: (chunk) => {
         streamAccum += chunk;
@@ -271,54 +257,45 @@ export class Orchestrator extends EventEmitter {
     });
 
     this.abortControllers.delete(node.id);
+    this.bumpActive(-1);
 
-    if (ctrl.signal.aborted) {
-      this.updateNode(node.id, { status: 'cancelled', endTime: Date.now() });
-    } else if (result.success) {
-      this.updateNode(node.id, {
-        status: 'done',
-        output: result.output,
-        streamBuffer: undefined,
-        endTime: Date.now(),
-      });
-    } else {
-      this.updateNode(node.id, {
-        status: 'error',
-        error: result.error,
-        output: result.output,
-        endTime: Date.now(),
-      });
-    }
+    const finalStatus = ctrl.signal.aborted ? 'cancelled'
+      : result.success ? 'done' : 'error';
 
-    return this.nodes.get(node.id)!;
+    this.updateNode(node.id, {
+      status: finalStatus,
+      output: result.output,
+      error: result.error,
+      streamBuffer: undefined,
+      endTime: Date.now(),
+    });
+
+    // Save to history
+    const n = this.nodes.get(node.id)!;
+    this.history.add({
+      agentName: node.name,
+      agentType: node.type,
+      input,
+      output: result.output,
+      timestamp: Date.now(),
+      durationMs: result.durationMs,
+      success: result.success,
+    });
+
+    return n;
   }
 
-  private createNode(config: AgentConfig, input: string, parentId?: string): AgentNode {
-    const node: AgentNode = {
-      ...config,
-      status: 'idle',
-      input,
-      parentId,
-      children: [],
-    };
-
+  private createNode(config: AgentConfig, input: string, parentId?: string, ctx?: EditorContext): AgentNode {
+    const node: AgentNode = { ...config, status: 'idle', input, parentId, children: [], context: ctx };
     this.nodes.set(node.id, node);
-
-    // Register as child of parent
     if (parentId) {
       const parent = this.nodes.get(parentId);
-      if (parent) {
-        parent.children.push(node.id);
-        this.nodes.set(parentId, parent);
-      }
+      if (parent) { parent.children.push(node.id); this.nodes.set(parentId, parent); }
     }
-
     this.emit('message', { type: 'addNode', node } satisfies ExtToWebMsg);
-
     if (parentId) {
       this.emit('message', { type: 'addEdge', from: parentId, to: node.id } satisfies ExtToWebMsg);
     }
-
     return node;
   }
 
@@ -331,5 +308,28 @@ export class Orchestrator extends EventEmitter {
 
   private log(text: string, level: 'info' | 'warn' | 'error'): void {
     this.emit('message', { type: 'log', text, level } satisfies ExtToWebMsg);
+  }
+
+  private bumpActive(delta: number): void {
+    this.activeCount = Math.max(0, this.activeCount + delta);
+    this.emitActiveCount();
+  }
+
+  private emitActiveCount(): void {
+    this.emit('message', { type: 'activeAgents', count: this.activeCount } satisfies ExtToWebMsg);
+  }
+
+  /** Very simple cron-like parser: supports "@daily", "@hourly", "30m", "1h" */
+  private cronToMs(expr: string): number {
+    if (expr === '@daily')  return 24 * 60 * 60 * 1000;
+    if (expr === '@hourly') return 60 * 60 * 1000;
+    const m = expr.match(/^(\d+)(m|h|s)$/);
+    if (m) {
+      const n = parseInt(m[1]);
+      if (m[2] === 's') return n * 1000;
+      if (m[2] === 'm') return n * 60 * 1000;
+      if (m[2] === 'h') return n * 60 * 60 * 1000;
+    }
+    return 60 * 60 * 1000; // default 1h
   }
 }

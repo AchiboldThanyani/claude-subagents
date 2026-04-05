@@ -3,310 +3,221 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy"
-  content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
+  content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Claude Subagents</title>
 <style>
   :root {
-    --bg:        #1e1e2e;
-    --surface:   #2a2a3e;
-    --border:    #3a3a5c;
-    --accent:    #7c6af7;
-    --accent2:   #5eead4;
-    --text:      #cdd6f4;
-    --muted:     #6c7086;
-    --ok:        #a6e3a1;
-    --err:       #f38ba8;
-    --warn:      #f9e2af;
-    --running:   #89b4fa;
+    --bg:#1e1e2e; --surface:#2a2a3e; --border:#3a3a5c;
+    --accent:#7c6af7; --accent2:#5eead4;
+    --text:#cdd6f4; --muted:#6c7086;
+    --ok:#a6e3a1; --err:#f38ba8; --warn:#f9e2af; --running:#89b4fa;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    font-size: 13px;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  #topbar{display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+  #topbar h1{font-size:13px;font-weight:600;color:var(--accent);flex:1;white-space:nowrap}
+  .ctx-badge{font-size:10px;background:rgba(94,234,212,.12);border:1px solid rgba(94,234,212,.3);color:var(--accent2);border-radius:4px;padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+  button{background:var(--accent);color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:500;transition:opacity .15s;white-space:nowrap}
+  button:hover{opacity:.85}
+  button.secondary{background:var(--surface);border:1px solid var(--border);color:var(--text)}
+  button.danger{background:var(--err);color:#1e1e2e}
+  button.sm{padding:3px 7px;font-size:10px}
+  #main{display:flex;flex:1;overflow:hidden}
+  #graph-wrap{flex:1;position:relative;overflow:hidden;background:var(--bg)}
+  #graph-canvas{position:absolute;top:0;left:0;cursor:grab}
+  #graph-canvas:active{cursor:grabbing}
+  #empty-hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);pointer-events:none}
+  #empty-hint .big{font-size:36px}
+  #chain-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 10px;pointer-events:none;opacity:0;transition:opacity .3s}
+  #chain-hint.show{opacity:1}
+  #sidebar{width:310px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+  #sidebar-tabs{display:flex;border-bottom:1px solid var(--border);overflow-x:auto}
+  .stab{flex:1;min-width:44px;padding:7px 4px;text-align:center;cursor:pointer;font-size:11px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;transition:all .15s}
+  .stab.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(124,106,247,.08)}
+  #sidebar-body{flex:1;overflow-y:auto;padding:10px}
+  .detail-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .agent-icon{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+  .detail-title{font-weight:600;font-size:12px}
+  .detail-subtitle{color:var(--muted);font-size:10px}
+  .badge{display:inline-block;padding:2px 6px;border-radius:10px;font-size:9px;font-weight:600;text-transform:uppercase}
+  .badge.idle{background:var(--border);color:var(--muted)}
+  .badge.running{background:rgba(137,180,250,.2);color:var(--running)}
+  .badge.done{background:rgba(166,227,161,.2);color:var(--ok)}
+  .badge.error{background:rgba(243,139,168,.2);color:var(--err)}
+  .badge.cancelled{background:rgba(249,226,175,.2);color:var(--warn)}
+  .section-label{font-size:10px;font-weight:600;text-transform:uppercase;color:var(--muted);margin:8px 0 3px;letter-spacing:.05em}
+  .output-box{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-family:'Cascadia Code','Fira Code',monospace;font-size:10px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto;color:var(--text)}
+  .output-box.stream{color:var(--running)}
+  .action-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+  .powers-list{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}
+  .power-chip{background:rgba(94,234,212,.1);border:1px solid rgba(94,234,212,.3);color:var(--accent2);border-radius:4px;padding:1px 6px;font-size:10px}
+  #no-selection{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:7px;color:var(--muted)}
+  #no-selection .icon{font-size:28px}
+  .run-section{margin-bottom:11px}
+  .run-section label{display:block;margin-bottom:4px;font-weight:500;font-size:11px}
+  select,textarea,input[type=text]{width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:5px 7px;font-size:11px;font-family:inherit;outline:none;transition:border-color .15s}
+  select:focus,textarea:focus,input[type=text]:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:70px}
+  .checkbox-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;cursor:pointer}
+  .checkbox-row input{width:auto}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--border);margin-top:5px}
+  .toggle-row span{font-size:11px;color:var(--muted)}
+  #log-area{font-family:monospace;font-size:10px;line-height:1.7}
+  .log-line{padding:1px 0}
+  .log-line.info{color:var(--text)}
+  .log-line.warn{color:var(--warn)}
+  .log-line.error{color:var(--err)}
+  .hist-entry{border:1px solid var(--border);border-radius:6px;padding:7px;margin-bottom:7px;cursor:pointer;transition:border-color .15s}
+  .hist-entry:hover{border-color:var(--accent)}
+  .hist-entry .he-header{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+  .hist-entry .he-name{font-weight:600;font-size:11px;flex:1}
+  .hist-entry .he-time{font-size:10px;color:var(--muted)}
+  .hist-entry .he-input{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hist-entry .he-out{font-size:10px;margin-top:4px;display:none;white-space:pre-wrap;word-break:break-word;max-height:120px;overflow-y:auto;background:var(--surface);border-radius:4px;padding:5px}
+  .hist-entry.expanded .he-out{display:block}
+  ::-webkit-scrollbar{width:4px;height:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .spinner{width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--running);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
+  #chain-mode-btn.active{background:rgba(249,226,175,.2);border:1px solid var(--warn);color:var(--warn)}
+  .ms{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;font-size:18px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;vertical-align:middle}
+  .ms.sm{font-size:14px}
+  .node-icon{font-family:'Material Symbols Rounded';font-variation-settings:'FILL' 1,'wght' 300,'GRAD' 0,'opsz' 20}
 
-  /* ── Top bar ── */
-  #topbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  #topbar h1 { font-size: 14px; font-weight: 600; color: var(--accent); flex: 1; }
-  button {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 5px;
-    padding: 5px 12px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 500;
-    transition: opacity .15s;
-  }
-  button:hover { opacity: .85; }
-  button.secondary {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text);
-  }
-  button.danger { background: var(--err); color: #1e1e2e; }
+  /* ── Resizable sidebar ── */
+  #resize-handle{width:5px;background:transparent;cursor:col-resize;flex-shrink:0;transition:background .15s;z-index:10}
+  #resize-handle:hover,#resize-handle.dragging{background:var(--accent)}
+  #sidebar{min-width:220px;max-width:600px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;position:relative}
+  #sidebar-collapse-btn{position:absolute;top:6px;right:6px;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;border-radius:4px;z-index:5;font-size:10px;display:flex;align-items:center}
+  #sidebar-collapse-btn:hover{color:var(--text);background:var(--border)}
+  #sidebar.collapsed{min-width:32px;width:32px!important}
+  #sidebar.collapsed #sidebar-tabs,#sidebar.collapsed #sidebar-body{display:none}
+  #sidebar.collapsed #sidebar-collapse-btn{right:4px}
 
-  /* ── Main layout ── */
-  #main {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-  }
+  /* ── Output modal ── */
+  #output-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+  #output-modal.show{display:flex}
+  #output-modal-inner{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:min(90vw,860px);max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
+  #output-modal-header{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}
+  #output-modal-title{font-weight:600;font-size:13px;flex:1}
+  #output-modal-body{flex:1;overflow-y:auto;padding:14px;font-family:'Cascadia Code','Fira Code',monospace;font-size:11px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+  #output-modal-actions{display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
 
-  /* ── Graph canvas ── */
-  #graph-wrap {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-    background: var(--bg);
-  }
-  #graph-canvas {
-    position: absolute;
-    top: 0; left: 0;
-    cursor: grab;
-  }
-  #graph-canvas:active { cursor: grabbing; }
-  #empty-hint {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    color: var(--muted);
-    pointer-events: none;
-  }
-  #empty-hint .big { font-size: 40px; }
-  #empty-hint p { font-size: 14px; }
+  /* ── Memory cards ── */
+  .mem-section{margin-bottom:14px}
+  .mem-section-title{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+  .mem-card{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:9px 11px;margin-bottom:6px;cursor:pointer;transition:border-color .15s}
+  .mem-card:hover{border-color:var(--accent)}
+  .mem-card .mc-name{font-weight:600;font-size:11px;margin-bottom:2px}
+  .mem-card .mc-desc{font-size:10px;color:var(--muted);margin-bottom:5px}
+  .mem-card .mc-body{font-size:10px;color:var(--text);display:none;white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radius:4px;padding:7px;margin-top:5px;max-height:200px;overflow-y:auto;line-height:1.6}
+  .mem-card.expanded .mc-body{display:block}
+  .mem-type-badge{padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;text-transform:uppercase}
+  .mem-type-badge.user{background:rgba(137,180,250,.2);color:var(--running)}
+  .mem-type-badge.feedback{background:rgba(249,226,175,.2);color:var(--warn)}
+  .mem-type-badge.project{background:rgba(166,227,161,.2);color:var(--ok)}
+  .mem-type-badge.reference{background:rgba(94,234,212,.2);color:var(--accent2)}
+  .mem-type-badge.unknown{background:var(--border);color:var(--muted)}
 
-  /* ── Sidebar ── */
-  #sidebar {
-    width: 320px;
-    border-left: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-  #sidebar-tabs {
-    display: flex;
-    border-bottom: 1px solid var(--border);
-  }
-  .stab {
-    flex: 1;
-    padding: 8px;
-    text-align: center;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--muted);
-    border-bottom: 2px solid transparent;
-    transition: all .15s;
-  }
-  .stab.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
-    background: rgba(124,106,247,.08);
-  }
-  #sidebar-body { flex: 1; overflow-y: auto; padding: 12px; }
-
-  /* ── Agent detail ── */
-  .detail-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-  .detail-header .agent-icon {
-    width: 32px; height: 32px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px;
-    flex-shrink: 0;
-  }
-  .detail-title { font-weight: 600; }
-  .detail-subtitle { color: var(--muted); font-size: 11px; }
-  .badge {
-    display: inline-block;
-    padding: 2px 7px;
-    border-radius: 10px;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-  .badge.idle      { background: var(--border); color: var(--muted); }
-  .badge.running   { background: rgba(137,180,250,.2); color: var(--running); }
-  .badge.done      { background: rgba(166,227,161,.2); color: var(--ok); }
-  .badge.error     { background: rgba(243,139,168,.2); color: var(--err); }
-  .badge.cancelled { background: rgba(249,226,175,.2); color: var(--warn); }
-  .section-label {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 10px 0 4px;
-    letter-spacing: .06em;
-  }
-  .output-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 8px 10px;
-    font-family: 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 11px;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 300px;
-    overflow-y: auto;
-    color: var(--text);
-  }
-  .output-box.stream { color: var(--running); }
-  .powers-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-  .power-chip {
-    background: rgba(94,234,212,.1);
-    border: 1px solid rgba(94,234,212,.3);
-    color: var(--accent2);
-    border-radius: 4px;
-    padding: 2px 7px;
-    font-size: 10px;
-  }
-  #no-selection {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 8px;
-    color: var(--muted);
-  }
-  #no-selection .icon { font-size: 32px; }
-
-  /* ── Run panel ── */
-  .run-section { margin-bottom: 14px; }
-  .run-section label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 12px; }
-  select, textarea, input[type=text] {
-    width: 100%;
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 6px 8px;
-    font-size: 12px;
-    font-family: inherit;
-    outline: none;
-    transition: border-color .15s;
-  }
-  select:focus, textarea:focus, input[type=text]:focus {
-    border-color: var(--accent);
-  }
-  textarea { resize: vertical; min-height: 80px; }
-  .checkbox-row {
-    display: flex; align-items: center; gap: 6px;
-    margin-bottom: 5px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .checkbox-row input { width: auto; }
-
-  /* ── Log panel ── */
-  #log-area {
-    font-family: monospace;
-    font-size: 11px;
-    line-height: 1.7;
-  }
-  .log-line { padding: 1px 0; }
-  .log-line.info  { color: var(--text); }
-  .log-line.warn  { color: var(--warn); }
-  .log-line.error { color: var(--err); }
-
-  /* ── Scrollbars ── */
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-  /* ── Spinner ── */
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .spinner {
-    width: 14px; height: 14px;
-    border: 2px solid var(--border);
-    border-top-color: var(--running);
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
-    display: inline-block;
-    vertical-align: middle;
-  }
+  /* ── Usage dashboard ── */
+  .usage-stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px}
+  .usage-stat{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:10px;text-align:center}
+  .usage-stat .us-val{font-size:22px;font-weight:700;color:var(--accent);line-height:1}
+  .usage-stat .us-label{font-size:10px;color:var(--muted);margin-top:3px}
+  .usage-bar-row{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+  .usage-bar-label{font-size:10px;width:90px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;flex-shrink:0}
+  .usage-bar-track{flex:1;background:var(--border);border-radius:3px;height:7px;overflow:hidden}
+  .usage-bar-fill{height:100%;border-radius:3px;transition:width .4s}
+  .usage-bar-count{font-size:10px;color:var(--muted);width:28px;text-align:right;flex-shrink:0}
+  .timeline-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin:1px;vertical-align:middle}
+  #timeline-wrap{display:flex;flex-wrap:wrap;gap:2px;padding:6px 0}
 </style>
 </head>
 <body>
 
-<!-- TOP BAR -->
 <div id="topbar">
-  <h1>⬡ Claude Subagents</h1>
-  <button onclick="switchTab('run')">+ Run Agent</button>
-  <button onclick="switchTab('create')">✦ New Agent</button>
-  <button class="danger secondary" onclick="clearGraph()">Clear</button>
+  <h1><span class="ms sm" style="color:var(--accent)">hub</span> Claude Agents</h1>
+  <span class="ctx-badge" id="ctx-badge">No file open</span>
+  <button onclick="switchTab('run')"><span class="ms sm">play_arrow</span> Run</button>
+  <button onclick="switchTab('create')"><span class="ms sm">add</span> New</button>
+  <button id="chain-mode-btn" class="secondary sm" onclick="toggleChainMode()" title="Chain mode: click two nodes to pipe output"><span class="ms sm">cable</span> Chain</button>
+  <button class="danger secondary sm" onclick="clearGraph()"><span class="ms sm">delete_sweep</span></button>
 </div>
 
-<!-- MAIN -->
-<div id="main">
-
-  <!-- GRAPH -->
-  <div id="graph-wrap">
-    <canvas id="graph-canvas"></canvas>
-    <div id="empty-hint" id="hint">
-      <span class="big">⬡</span>
-      <p>No agents yet — run a task to get started</p>
+<!-- Output expand modal -->
+<div id="output-modal">
+  <div id="output-modal-inner">
+    <div id="output-modal-header">
+      <span class="ms sm" id="output-modal-icon" style="color:var(--accent)">summarize</span>
+      <span id="output-modal-title">Output</span>
+      <button class="secondary sm" onclick="closeModal()"><span class="ms sm">close</span></button>
+    </div>
+    <div id="output-modal-body"></div>
+    <div id="output-modal-actions">
+      <button class="sm" onclick="modalCopy()"><span class="ms sm">content_copy</span> Copy</button>
+      <button class="sm secondary" onclick="modalDiff()"><span class="ms sm">difference</span> Diff</button>
+      <button class="sm secondary" onclick="modalInsert()"><span class="ms sm">keyboard_return</span> Insert</button>
+      <button class="sm secondary" onclick="modalExport()"><span class="ms sm">download</span> Export MD</button>
     </div>
   </div>
+</div>
 
-  <!-- SIDEBAR -->
+<div id="main">
+  <div id="graph-wrap">
+    <canvas id="graph-canvas"></canvas>
+    <div id="empty-hint">
+      <span class="ms" style="font-size:48px;color:var(--border)">hub</span>
+      <p>Run an agent to get started</p>
+      <p style="font-size:11px">Use the Run button or right-click in the editor</p>
+    </div>
+    <div id="chain-hint">Click a second node to pipe output →</div>
+  </div>
+
+  <div id="resize-handle" id="resize-handle"></div>
+
   <div id="sidebar">
+    <button id="sidebar-collapse-btn" onclick="toggleSidebar()" title="Collapse sidebar"><span class="ms sm">chevron_right</span></button>
     <div id="sidebar-tabs">
-      <div class="stab active" id="tab-detail" onclick="switchTab('detail')">Detail</div>
-      <div class="stab" id="tab-run"    onclick="switchTab('run')">Run</div>
-      <div class="stab" id="tab-create" onclick="switchTab('create')">Create</div>
-      <div class="stab" id="tab-log"    onclick="switchTab('log')">Log</div>
+      <div class="stab active" id="tab-detail"   onclick="switchTab('detail')" title="Detail"><span class="ms sm">info</span></div>
+      <div class="stab"        id="tab-run"       onclick="switchTab('run')"    title="Run"><span class="ms sm">play_arrow</span></div>
+      <div class="stab"        id="tab-create"    onclick="switchTab('create')" title="New Agent"><span class="ms sm">add_circle</span></div>
+      <div class="stab"        id="tab-schedule"  onclick="switchTab('schedule')" title="Schedule"><span class="ms sm">schedule</span></div>
+      <div class="stab"        id="tab-memory"    onclick="switchTab('memory')" title="Memory"><span class="ms sm">psychology</span></div>
+      <div class="stab"        id="tab-usage"     onclick="switchTab('usage')"  title="Usage"><span class="ms sm">insights</span></div>
+      <div class="stab"        id="tab-history"   onclick="switchTab('history')" title="History"><span class="ms sm">history</span></div>
+      <div class="stab"        id="tab-log"       onclick="switchTab('log')"    title="Log"><span class="ms sm">terminal</span></div>
     </div>
 
     <div id="sidebar-body">
 
-      <!-- DETAIL TAB -->
+      <!-- DETAIL -->
       <div id="panel-detail">
-        <div id="no-selection">
-          <span class="icon">↖</span>
-          <span>Click a node to inspect it</span>
-        </div>
+        <div id="no-selection"><span class="ms" style="font-size:28px;color:var(--border)">touch_app</span><span>Click a node to inspect it</span></div>
         <div id="agent-detail" style="display:none"></div>
       </div>
 
-      <!-- RUN TAB -->
+      <!-- RUN -->
       <div id="panel-run" style="display:none">
         <div class="run-section">
-          <label>Agent type</label>
-          <select id="run-type">
-            <option value="planner">🗺 Planner — breaks task into subagents</option>
+          <label>Agent</label>
+          <select id="run-type" onchange="onRunTypeChange()">
+            <option value="planner">🗺 Planner — full multi-agent plan</option>
             <option value="code-review">🔍 Code Reviewer</option>
-            <option value="researcher">🌐 Researcher (uses web)</option>
-            <option value="coder">💻 Coder (reads/writes files)</option>
+            <option value="researcher">🌐 Researcher (web)</option>
+            <option value="coder">💻 Coder (files + terminal)</option>
             <option value="summarizer">📋 Summarizer</option>
+            <option value="git-commit">📝 Git Commit Writer</option>
+            <option value="pr-description">🔀 PR Description Writer</option>
+            <option value="test-writer">🧪 Test Writer</option>
+            <option value="bug-finder">🐛 Bug Finder</option>
+            <option value="docs-writer">📖 Docs Writer</option>
+            <option value="refactor">♻ Refactor Agent</option>
+            <option value="__custom__" id="custom-opt" style="display:none">✦ Custom Agent…</option>
           </select>
         </div>
         <div class="run-section" id="custom-agent-section" style="display:none">
@@ -316,556 +227,704 @@
         <div class="run-section">
           <label>Model</label>
           <select id="run-model">
-            <option value="">Default (Claude Code setting)</option>
+            <option value="">Default</option>
             <option value="claude-opus-4-6">Opus 4.6 — most capable</option>
             <option value="claude-sonnet-4-6">Sonnet 4.6 — balanced</option>
             <option value="claude-haiku-4-5-20251001">Haiku 4.5 — fastest</option>
           </select>
         </div>
         <div class="run-section">
-          <label>Input / Prompt</label>
+          <label>Prompt</label>
           <textarea id="run-input" placeholder="Describe the task…"></textarea>
         </div>
-        <button style="width:100%" onclick="submitRun()">▶ Run</button>
+        <div class="toggle-row">
+          <span>📎 Include current file context</span>
+          <input type="checkbox" id="run-use-context" checked>
+        </div>
+        <div id="run-ctx-info" style="font-size:10px;color:var(--accent2);margin-top:4px"></div>
+        <button style="width:100%;margin-top:10px" onclick="submitRun()">▶ Run</button>
       </div>
 
-      <!-- CREATE TAB -->
+      <!-- CREATE -->
       <div id="panel-create" style="display:none">
         <div class="run-section">
-          <label>Agent name</label>
+          <label>Name</label>
           <input type="text" id="create-name" placeholder="e.g. Documentation Writer">
         </div>
         <div class="run-section">
           <label>System prompt</label>
-          <textarea id="create-prompt" style="min-height:120px"
-            placeholder="You are an expert documentation writer. When given code, produce clear, concise docs..."></textarea>
+          <textarea id="create-prompt" style="min-height:110px" placeholder="You are an expert…"></textarea>
         </div>
         <div class="run-section">
           <label>Model</label>
           <select id="create-model">
-            <option value="">Default (Claude Code setting)</option>
-            <option value="claude-opus-4-6">Opus 4.6 — most capable</option>
-            <option value="claude-sonnet-4-6">Sonnet 4.6 — balanced</option>
-            <option value="claude-haiku-4-5-20251001">Haiku 4.5 — fastest</option>
+            <option value="">Default</option>
+            <option value="claude-opus-4-6">Opus 4.6</option>
+            <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+            <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
           </select>
         </div>
         <div class="run-section">
           <label>Superpowers</label>
-          <label class="checkbox-row"><input type="checkbox" value="files"> 📁 Files (read/write/edit)</label>
-          <label class="checkbox-row"><input type="checkbox" value="terminal"> 💻 Terminal (bash)</label>
-          <label class="checkbox-row"><input type="checkbox" value="web"> 🌐 Web search & fetch</label>
-          <label class="checkbox-row"><input type="checkbox" value="todos"> ✅ Todo management</label>
+          <label class="checkbox-row"><input type="checkbox" value="files"> 📁 Files</label>
+          <label class="checkbox-row"><input type="checkbox" value="terminal"> 💻 Terminal</label>
+          <label class="checkbox-row"><input type="checkbox" value="web"> 🌐 Web</label>
+          <label class="checkbox-row"><input type="checkbox" value="todos"> ✅ Todos</label>
         </div>
         <button style="width:100%" onclick="submitCreate()">✦ Create Agent</button>
-        <div id="create-feedback" style="margin-top:8px;color:var(--ok);font-size:12px;display:none"></div>
+        <div id="create-feedback" style="margin-top:6px;color:var(--ok);font-size:11px;display:none"></div>
       </div>
 
-      <!-- LOG TAB -->
+      <!-- SCHEDULE -->
+      <div id="panel-schedule" style="display:none">
+        <div class="run-section">
+          <label>Agent</label>
+          <select id="sched-type">
+            <option value="summarizer">📋 Summarizer</option>
+            <option value="bug-finder">🐛 Bug Finder</option>
+            <option value="code-review">🔍 Code Reviewer</option>
+            <option value="git-commit">📝 Git Commit Writer</option>
+          </select>
+        </div>
+        <div class="run-section">
+          <label>Interval</label>
+          <select id="sched-interval">
+            <option value="30m">Every 30 minutes</option>
+            <option value="1h">Every hour</option>
+            <option value="@daily">Daily</option>
+          </select>
+        </div>
+        <div class="run-section">
+          <label>Prompt</label>
+          <textarea id="sched-input" placeholder="e.g. Summarise changes since last run"></textarea>
+        </div>
+        <button style="width:100%" onclick="submitSchedule()">⏰ Schedule</button>
+        <div id="sched-feedback" style="margin-top:6px;color:var(--ok);font-size:11px;display:none"></div>
+      </div>
+
+      <!-- HISTORY -->
+      <div id="panel-history" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--muted)" id="hist-count">No history yet</span>
+          <button class="sm secondary" onclick="vscode.postMessage({type:'openHistory'})">↺ Refresh</button>
+        </div>
+        <div id="history-list"></div>
+      </div>
+
+      <!-- MEMORY -->
+      <div id="panel-memory" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--muted)" id="mem-count">Loading…</span>
+          <button class="sm secondary" onclick="vscode.postMessage({type:'requestMemory'})"><span class="ms sm">refresh</span></button>
+        </div>
+        <div id="memory-list"></div>
+      </div>
+
+      <!-- USAGE -->
+      <div id="panel-usage" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-size:11px;font-weight:600">Usage Dashboard</span>
+          <button class="sm secondary" onclick="vscode.postMessage({type:'requestUsage'})"><span class="ms sm">refresh</span></button>
+        </div>
+        <div class="usage-stat-grid">
+          <div class="usage-stat"><div class="us-val" id="us-total">—</div><div class="us-label">Total Runs</div></div>
+          <div class="usage-stat"><div class="us-val" id="us-rate">—</div><div class="us-label">Success Rate</div></div>
+        </div>
+        <div class="section-label">Runs by Agent</div>
+        <div id="us-bars" style="margin-bottom:12px"></div>
+        <div class="section-label">Recent Timeline</div>
+        <div id="timeline-wrap"></div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:3px"></span>success
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--err);margin:0 3px 0 8px"></span>error
+        </div>
+      </div>
+
+      <!-- LOG -->
       <div id="panel-log" style="display:none">
         <div id="log-area"></div>
       </div>
 
-    </div><!-- sidebar-body -->
-  </div><!-- sidebar -->
-</div><!-- main -->
+    </div>
+  </div>
+</div>
 
 <script>
-// ─────────────────────────────────────────────────────────────────────────────
-// VS Code API
-// ─────────────────────────────────────────────────────────────────────────────
 const vscode = acquireVsCodeApi();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// State
-// ─────────────────────────────────────────────────────────────────────────────
-const nodes = new Map();   // id → AgentNode
-const edges = [];          // {from, to}
+// ── State ──────────────────────────────────────────────────────────────────
+const nodes = new Map();
+const edges = [];
 let selectedId = null;
 let customAgents = [];
+let currentCtx = null;
+let chainMode = false;
+let chainSource = null;
 
-// Graph layout
-const nodeRadius = 30;
-const layout = new Map(); // id → {x, y, vx, vy}
-
-// Canvas pan/zoom
+const layout = new Map();
+const nodeRadius = 28;
 let camX = 0, camY = 0, camScale = 1;
 let isDragging = false, dragStart = null, dragNodeId = null;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Canvas setup
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Canvas ─────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('graph-canvas');
 const ctx = canvas.getContext('2d');
 const wrap = document.getElementById('graph-wrap');
 
-function resizeCanvas() {
-  canvas.width = wrap.clientWidth;
-  canvas.height = wrap.clientHeight;
-  draw();
-}
-
-const ro = new ResizeObserver(resizeCanvas);
-ro.observe(wrap);
+function resizeCanvas() { canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight; }
+new ResizeObserver(resizeCanvas).observe(wrap);
 resizeCanvas();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Colors / icons per agent type & status
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Visuals ────────────────────────────────────────────────────────────────
+// Material Symbols ligature names
 const TYPE_ICONS = {
-  planner:      '🗺',
-  'code-review':'🔍',
-  researcher:   '🌐',
-  coder:        '💻',
-  summarizer:   '📋',
-  custom:       '✦',
-};
-const STATUS_COLOR = {
-  idle:      '#3a3a5c',
-  running:   '#89b4fa',
-  done:      '#a6e3a1',
-  error:     '#f38ba8',
-  cancelled: '#f9e2af',
-};
-const STATUS_BG = {
-  idle:      'rgba(58,58,92,.4)',
-  running:   'rgba(137,180,250,.15)',
-  done:      'rgba(166,227,161,.15)',
-  error:     'rgba(243,139,168,.15)',
-  cancelled: 'rgba(249,226,175,.15)',
+  planner:        'account_tree',
+  'code-review':  'rate_review',
+  researcher:     'travel_explore',
+  coder:          'code',
+  summarizer:     'summarize',
+  'git-commit':   'commit',
+  'pr-description':'merge',
+  'test-writer':  'science',
+  'bug-finder':   'bug_report',
+  'docs-writer':  'menu_book',
+  refactor:       'autorenew',
+  custom:         'tune',
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Layout — simple force-directed
-// ─────────────────────────────────────────────────────────────────────────────
+// Per-type accent colours for node backgrounds
+const TYPE_COLOR = {
+  planner:        '#7c6af7',
+  'code-review':  '#89b4fa',
+  researcher:     '#5eead4',
+  coder:          '#a6e3a1',
+  summarizer:     '#cba6f7',
+  'git-commit':   '#f9e2af',
+  'pr-description':'89dceb',
+  'test-writer':  '#94e2d5',
+  'bug-finder':   '#f38ba8',
+  'docs-writer':  '#b4befe',
+  refactor:       '#fab387',
+  custom:         '#cdd6f4',
+};
+const STATUS_COLOR = { idle:'#3a3a5c',running:'#89b4fa',done:'#a6e3a1',error:'#f38ba8',cancelled:'#f9e2af' };
+const STATUS_BG    = { idle:'rgba(58,58,92,.4)',running:'rgba(137,180,250,.15)',done:'rgba(166,227,161,.15)',error:'rgba(243,139,168,.15)',cancelled:'rgba(249,226,175,.15)' };
+
+// ── Physics ────────────────────────────────────────────────────────────────
 function getOrCreatePos(id) {
   if (!layout.has(id)) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = 80 + Math.random() * 120;
-    const cx = canvas.width / 2, cy = canvas.height / 2;
-    layout.set(id, { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r, vx: 0, vy: 0 });
+    const a = Math.random()*Math.PI*2, r = 80+Math.random()*120;
+    layout.set(id, { x: canvas.width/2+Math.cos(a)*r, y: canvas.height/2+Math.sin(a)*r, vx:0, vy:0 });
   }
   return layout.get(id);
 }
 
 function tickPhysics() {
   const ids = [...nodes.keys()];
-  if (ids.length === 0) return;
-
-  // Repulsion between all pairs
-  for (let i = 0; i < ids.length; i++) {
-    for (let j = i + 1; j < ids.length; j++) {
-      const a = layout.get(ids[i]);
-      const b = layout.get(ids[j]);
-      if (!a || !b) continue;
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const force = 8000 / (dist * dist);
-      const fx = (dx / dist) * force, fy = (dy / dist) * force;
-      a.vx -= fx; a.vy -= fy;
-      b.vx += fx; b.vy += fy;
-    }
+  if (!ids.length) return;
+  for (let i=0;i<ids.length;i++) for (let j=i+1;j<ids.length;j++) {
+    const a=layout.get(ids[i]),b=layout.get(ids[j]);
+    if(!a||!b) continue;
+    const dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+    const f=7000/(d*d);
+    a.vx-=dx/d*f; a.vy-=dy/d*f; b.vx+=dx/d*f; b.vy+=dy/d*f;
   }
-
-  // Attraction along edges
-  for (const { from, to } of edges) {
-    const a = layout.get(from), b = layout.get(to);
-    if (!a || !b) continue;
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const ideal = 160;
-    const force = (dist - ideal) * 0.03;
-    const fx = (dx / dist) * force, fy = (dy / dist) * force;
-    a.vx += fx; a.vy += fy;
-    b.vx -= fx; b.vy -= fy;
+  for (const {from,to} of edges) {
+    const a=layout.get(from),b=layout.get(to);
+    if(!a||!b) continue;
+    const dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+    const f=(d-150)*0.03;
+    a.vx+=dx/d*f; a.vy+=dy/d*f; b.vx-=dx/d*f; b.vy-=dy/d*f;
   }
-
-  // Gravity toward centre
-  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const cx=canvas.width/2,cy=canvas.height/2;
   for (const id of ids) {
-    const p = layout.get(id);
-    if (!p) continue;
-    p.vx += (cx - p.x) * 0.003;
-    p.vy += (cy - p.y) * 0.003;
-    // Damping
-    p.vx *= 0.85; p.vy *= 0.85;
-    p.x += p.vx; p.y += p.vy;
+    const p=layout.get(id);
+    if(!p) continue;
+    p.vx+=(cx-p.x)*.003; p.vy+=(cy-p.y)*.003;
+    p.vx*=.85; p.vy*=.85; p.x+=p.vx; p.y+=p.vy;
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Draw
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Draw ───────────────────────────────────────────────────────────────────
 function draw() {
-  const w = canvas.width, h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
-
-  // Show/hide empty hint
-  document.getElementById('empty-hint').style.display = nodes.size === 0 ? 'flex' : 'none';
-
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  document.getElementById('empty-hint').style.display = nodes.size===0 ? 'flex' : 'none';
   ctx.save();
-  ctx.translate(camX, camY);
-  ctx.scale(camScale, camScale);
+  ctx.translate(camX, camY); ctx.scale(camScale, camScale);
 
-  // Draw edges
-  for (const { from, to } of edges) {
-    const a = layout.get(from), b = layout.get(to);
-    if (!a || !b) continue;
-
-    // Arrow from edge of source circle to edge of target
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const sx = a.x + (dx / dist) * nodeRadius;
-    const sy = a.y + (dy / dist) * nodeRadius;
-    const ex = b.x - (dx / dist) * (nodeRadius + 6);
-    const ey = b.y - (dy / dist) * (nodeRadius + 6);
-
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.strokeStyle = '#3a3a5c';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Arrowhead
-    const angle = Math.atan2(dy, dx);
-    ctx.beginPath();
-    ctx.moveTo(ex, ey);
-    ctx.lineTo(ex - 8 * Math.cos(angle - 0.4), ey - 8 * Math.sin(angle - 0.4));
-    ctx.lineTo(ex - 8 * Math.cos(angle + 0.4), ey - 8 * Math.sin(angle + 0.4));
-    ctx.closePath();
-    ctx.fillStyle = '#3a3a5c';
-    ctx.fill();
+  for (const {from,to} of edges) {
+    const a=layout.get(from),b=layout.get(to);
+    if(!a||!b) continue;
+    const dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+    const sx=a.x+dx/d*nodeRadius,sy=a.y+dy/d*nodeRadius;
+    const ex=b.x-dx/d*(nodeRadius+5),ey=b.y-dy/d*(nodeRadius+5);
+    ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey);
+    ctx.strokeStyle='#3a3a5c'; ctx.lineWidth=1.5; ctx.stroke();
+    const ang=Math.atan2(dy,dx);
+    ctx.beginPath(); ctx.moveTo(ex,ey);
+    ctx.lineTo(ex-7*Math.cos(ang-.4),ey-7*Math.sin(ang-.4));
+    ctx.lineTo(ex-7*Math.cos(ang+.4),ey-7*Math.sin(ang+.4));
+    ctx.closePath(); ctx.fillStyle='#3a3a5c'; ctx.fill();
   }
 
-  // Draw nodes
   for (const [id, node] of nodes) {
-    const pos = layout.get(id);
-    if (!pos) continue;
+    const pos=layout.get(id); if(!pos) continue;
+    const isSel = id===selectedId;
+    const isChainSrc = id===chainSource;
+    const sc=STATUS_COLOR[node.status]||'#3a3a5c';
+    const sb=STATUS_BG[node.status]||'rgba(58,58,92,.4)';
 
-    const isSelected = id === selectedId;
-    const statusColor = STATUS_COLOR[node.status] || '#3a3a5c';
-    const statusBg = STATUS_BG[node.status] || 'rgba(58,58,92,.4)';
+    if (isSel || isChainSrc) {
+      ctx.save(); ctx.shadowBlur=16; ctx.shadowColor=isChainSrc?'#f9e2af':'#7c6af7';
+    }
+    ctx.beginPath(); ctx.arc(pos.x,pos.y,nodeRadius,0,Math.PI*2);
+    ctx.fillStyle=sb; ctx.fill();
+    ctx.strokeStyle=isChainSrc?'#f9e2af':isSel?'#7c6af7':sc;
+    ctx.lineWidth=isSel||isChainSrc?2.5:1.5; ctx.stroke();
+    if (isSel||isChainSrc) ctx.restore();
 
-    // Glow for selected
-    if (isSelected) {
-      ctx.save();
-      ctx.shadowBlur = 18;
-      ctx.shadowColor = '#7c6af7';
+    if (node.status==='running') {
+      const t=(Date.now()%1500)/1500;
+      ctx.beginPath(); ctx.arc(pos.x,pos.y,nodeRadius+6+t*12,0,Math.PI*2);
+      ctx.strokeStyle=`rgba(137,180,250,${.4*(1-t)})`; ctx.lineWidth=2; ctx.stroke();
     }
 
-    // Circle background
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, nodeRadius, 0, Math.PI * 2);
-    ctx.fillStyle = statusBg;
-    ctx.fill();
-    ctx.strokeStyle = isSelected ? '#7c6af7' : statusColor;
-    ctx.lineWidth = isSelected ? 2.5 : 1.5;
-    ctx.stroke();
+    // Draw Material Symbol icon
+    ctx.font="500 16px 'Material Symbols Rounded'";
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle=isSel ? '#fff' : (TYPE_COLOR[node.type] || '#cdd6f4');
+    ctx.fillText(TYPE_ICONS[node.type]||'tune', pos.x, pos.y);
 
-    if (isSelected) ctx.restore();
+    ctx.font='600 9px Segoe UI,system-ui'; ctx.fillStyle='#cdd6f4';
+    ctx.textBaseline='top';
+    const lbl=node.name.length>14?node.name.slice(0,13)+'…':node.name;
+    ctx.fillText(lbl, pos.x, pos.y+nodeRadius+3);
 
-    // Running pulse ring
-    if (node.status === 'running') {
-      const t = (Date.now() % 1500) / 1500;
-      const r = nodeRadius + 8 + t * 14;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(137,180,250,${0.4 * (1 - t)})`;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-
-    // Icon
-    ctx.font = '18px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(TYPE_ICONS[node.type] || '⬡', pos.x, pos.y - 2);
-
-    // Name label below node
-    ctx.font = '600 10px Segoe UI, system-ui';
-    ctx.fillStyle = '#cdd6f4';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    const label = node.name.length > 14 ? node.name.slice(0, 13) + '…' : node.name;
-    ctx.fillText(label, pos.x, pos.y + nodeRadius + 4);
-
-    // Status dot
-    ctx.beginPath();
-    ctx.arc(pos.x + nodeRadius - 7, pos.y - nodeRadius + 7, 5, 0, Math.PI * 2);
-    ctx.fillStyle = statusColor;
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(pos.x+nodeRadius-6,pos.y-nodeRadius+6,4,0,Math.PI*2);
+    ctx.fillStyle=sc; ctx.fill();
   }
-
   ctx.restore();
 }
 
-// Animation loop
-let rafId;
-function animate() {
-  tickPhysics();
-  draw();
-  rafId = requestAnimationFrame(animate);
-}
+function animate() { tickPhysics(); draw(); requestAnimationFrame(animate); }
 animate();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Canvas mouse interaction
-// ─────────────────────────────────────────────────────────────────────────────
-function screenToWorld(x, y) {
-  return { x: (x - camX) / camScale, y: (y - camY) / camScale };
-}
-
-function hitTest(wx, wy) {
+// ── Mouse ──────────────────────────────────────────────────────────────────
+function screenToWorld(x,y) { return {x:(x-camX)/camScale,y:(y-camY)/camScale}; }
+function hitTest(wx,wy) {
   for (const [id] of nodes) {
-    const pos = layout.get(id);
-    if (!pos) continue;
-    const dx = wx - pos.x, dy = wy - pos.y;
-    if (dx * dx + dy * dy <= nodeRadius * nodeRadius) return id;
+    const p=layout.get(id); if(!p) continue;
+    const dx=wx-p.x,dy=wy-p.y;
+    if(dx*dx+dy*dy<=nodeRadius*nodeRadius) return id;
   }
   return null;
 }
 
 canvas.addEventListener('mousedown', e => {
-  const w = screenToWorld(e.offsetX, e.offsetY);
-  const hit = hitTest(w.x, w.y);
+  const w=screenToWorld(e.offsetX,e.offsetY);
+  const hit=hitTest(w.x,w.y);
   if (hit) {
-    dragNodeId = hit;
-    selectNode(hit);
+    if (chainMode) {
+      handleChainClick(hit);
+    } else {
+      dragNodeId=hit;
+      selectNode(hit);
+    }
   } else {
-    isDragging = true;
-    dragStart = { x: e.offsetX - camX, y: e.offsetY - camY };
+    isDragging=true;
+    dragStart={x:e.offsetX-camX,y:e.offsetY-camY};
   }
 });
-
 canvas.addEventListener('mousemove', e => {
   if (dragNodeId) {
-    const w = screenToWorld(e.offsetX, e.offsetY);
-    const pos = layout.get(dragNodeId);
-    if (pos) { pos.x = w.x; pos.y = w.y; pos.vx = 0; pos.vy = 0; }
-  } else if (isDragging && dragStart) {
-    camX = e.offsetX - dragStart.x;
-    camY = e.offsetY - dragStart.y;
+    const w=screenToWorld(e.offsetX,e.offsetY);
+    const p=layout.get(dragNodeId);
+    if(p){p.x=w.x;p.y=w.y;p.vx=0;p.vy=0;}
+  } else if (isDragging&&dragStart) {
+    camX=e.offsetX-dragStart.x; camY=e.offsetY-dragStart.y;
   }
 });
-
-canvas.addEventListener('mouseup', () => {
-  isDragging = false;
-  dragNodeId = null;
-  dragStart = null;
-});
-
+canvas.addEventListener('mouseup', ()=>{ isDragging=false; dragNodeId=null; dragStart=null; });
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
-  const factor = e.deltaY < 0 ? 1.1 : 0.9;
-  const mx = e.offsetX, my = e.offsetY;
-  camX = mx - (mx - camX) * factor;
-  camY = my - (my - camY) * factor;
-  camScale *= factor;
-  camScale = Math.min(3, Math.max(0.2, camScale));
-}, { passive: false });
+  const f=e.deltaY<0?1.1:.9;
+  camX=e.offsetX-(e.offsetX-camX)*f; camY=e.offsetY-(e.offsetY-camY)*f;
+  camScale=Math.min(3,Math.max(.2,camScale*f));
+},{passive:false});
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Node selection → sidebar
-// ─────────────────────────────────────────────────────────────────────────────
-function selectNode(id) {
-  selectedId = id;
-  switchTab('detail');
-  renderDetail();
+// ── Chain mode ─────────────────────────────────────────────────────────────
+function toggleChainMode() {
+  chainMode=!chainMode; chainSource=null;
+  document.getElementById('chain-mode-btn').classList.toggle('active',chainMode);
+  document.getElementById('chain-hint').classList.toggle('show',chainMode);
 }
 
-function renderDetail() {
-  const detail = document.getElementById('agent-detail');
-  const noSel = document.getElementById('no-selection');
-
-  if (!selectedId || !nodes.has(selectedId)) {
-    detail.style.display = 'none';
-    noSel.style.display = 'flex';
-    return;
+function handleChainClick(id) {
+  if (!chainSource) {
+    chainSource=id;
+  } else if (chainSource!==id) {
+    vscode.postMessage({type:'addEdge',from:chainSource,to:id});
+    chainSource=null; chainMode=false;
+    document.getElementById('chain-mode-btn').classList.remove('active');
+    document.getElementById('chain-hint').classList.remove('show');
   }
+}
 
-  const node = nodes.get(selectedId);
-  noSel.style.display = 'none';
-  detail.style.display = 'block';
+// ── Selection ──────────────────────────────────────────────────────────────
+function selectNode(id) { selectedId=id; switchTab('detail'); renderDetail(); }
 
-  const duration = node.endTime && node.startTime
-    ? ((node.endTime - node.startTime) / 1000).toFixed(1) + 's'
-    : node.startTime ? 'running…' : '—';
+function renderDetail() {
+  const detail=document.getElementById('agent-detail');
+  const noSel=document.getElementById('no-selection');
+  if (!selectedId||!nodes.has(selectedId)) {
+    detail.style.display='none'; noSel.style.display='flex'; return;
+  }
+  const node=nodes.get(selectedId);
+  noSel.style.display='none'; detail.style.display='block';
+  const dur=node.endTime&&node.startTime?((node.endTime-node.startTime)/1000).toFixed(1)+'s':node.startTime?'running…':'—';
 
   const outputHtml = node.streamBuffer
     ? `<div class="section-label">Streaming…</div><div class="output-box stream">${esc(node.streamBuffer)}</div>`
     : node.output
-    ? `<div class="section-label">Output</div><div class="output-box">${esc(node.output)}</div>`
-    : '';
+    ? `<div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+         Output
+         <button class="sm secondary" onclick="openModal('${node.id}')" style="padding:1px 5px"><span class="ms sm">open_in_full</span> Expand</button>
+       </div>
+       <div class="output-box">${esc(node.output.slice(0,800))}${node.output.length>800?'\n\n[… expand to see full output]':''}</div>
+       <div class="action-row">
+         <button class="sm" onclick="copyOutput()"><span class="ms sm">content_copy</span> Copy</button>
+         <button class="sm secondary" onclick="applyDiff()"><span class="ms sm">difference</span> Diff</button>
+         <button class="sm secondary" onclick="insertInline()"><span class="ms sm">keyboard_return</span> Insert</button>
+         <button class="sm secondary" onclick="exportMd()"><span class="ms sm">download</span> MD</button>
+       </div>` : '';
 
-  const errorHtml = node.error
-    ? `<div class="section-label">Error</div><div class="output-box" style="color:var(--err)">${esc(node.error)}</div>`
-    : '';
+  const errHtml = node.error
+    ? `<div class="section-label">Error</div><div class="output-box" style="color:var(--err)">${esc(node.error)}</div>` : '';
 
-  const powersHtml = (node.powers || []).filter(p => p !== 'none').length > 0
-    ? `<div class="section-label">Superpowers</div>
-       <div class="powers-list">${node.powers.filter(p=>p!=='none').map(p=>`<span class="power-chip">${p}</span>`).join('')}</div>`
-    : '';
+  const pwrHtml = (node.powers||[]).filter(p=>p!=='none').length>0
+    ? `<div class="section-label">Superpowers</div><div class="powers-list">${node.powers.filter(p=>p!=='none').map(p=>`<span class="power-chip">${p}</span>`).join('')}</div>` : '';
 
-  const cancelBtn = node.status === 'running'
-    ? `<button class="danger" style="margin-top:10px;width:100%" onclick="cancelAgent('${node.id}')">✕ Cancel</button>`
-    : '';
+  const cancelBtn = node.status==='running'
+    ? `<button class="danger sm" style="margin-top:8px;width:100%" onclick="vscode.postMessage({type:'cancelAgent',id:'${node.id}'})"><span class="ms sm">stop_circle</span> Cancel</button>` : '';
 
-  detail.innerHTML = `
+  detail.innerHTML=`
     <div class="detail-header">
-      <div class="agent-icon" style="background:${STATUS_BG[node.status]};border:1.5px solid ${STATUS_COLOR[node.status]}">
-        ${TYPE_ICONS[node.type] || '⬡'}
-      </div>
-      <div>
-        <div class="detail-title">${esc(node.name)}</div>
-        <div class="detail-subtitle">${node.type} · ${duration}</div>
-      </div>
+      <div class="agent-icon" style="background:${STATUS_BG[node.status]};border:1.5px solid ${STATUS_COLOR[node.status]}"><span class="ms" style="color:${TYPE_COLOR[node.type]||'var(--text)'};font-size:16px">${TYPE_ICONS[node.type]||'tune'}</span></div>
+      <div><div class="detail-title">${esc(node.name)}</div><div class="detail-subtitle">${node.type} · ${dur}</div></div>
       <span class="badge ${node.status}">${node.status}</span>
     </div>
-    ${powersHtml}
-    ${node.input ? `<div class="section-label">Input</div><div class="output-box">${esc(node.input.slice(0,400))}${node.input.length>400?'…':''}</div>` : ''}
-    ${outputHtml}
-    ${errorHtml}
-    ${cancelBtn}
-  `;
+    ${pwrHtml}
+    ${node.input?`<div class="section-label">Input</div><div class="output-box">${esc(node.input.slice(0,300))}${node.input.length>300?'…':''}</div>`:''}
+    ${outputHtml}${errHtml}${cancelBtn}`;
+}
+
+function copyOutput() {
+  const node=nodes.get(selectedId); if(!node?.output) return;
+  vscode.postMessage({type:'copyOutput',text:node.output});
+}
+function applyDiff() {
+  if(selectedId) vscode.postMessage({type:'applyDiff',nodeId:selectedId});
+}
+function insertInline() {
+  if(selectedId) vscode.postMessage({type:'insertInline',nodeId:selectedId});
+}
+function exportMd() {
+  if(selectedId) vscode.postMessage({type:'exportMarkdown',nodeId:selectedId});
 }
 
 function esc(str) {
-  return String(str)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab switching
-// ─────────────────────────────────────────────────────────────────────────────
-const TABS = ['detail', 'run', 'create', 'log'];
-function switchTab(name) {
-  for (const t of TABS) {
-    document.getElementById('panel-' + t).style.display = t === name ? 'block' : 'none';
-    document.getElementById('tab-' + t).classList.toggle('active', t === name);
+// ── Resizable sidebar ──────────────────────────────────────────────────────
+const sidebar = document.getElementById('sidebar');
+const resizeHandle = document.getElementById('resize-handle');
+let isResizing = false;
+
+resizeHandle.addEventListener('mousedown', e => {
+  isResizing = true;
+  resizeHandle.classList.add('dragging');
+  e.preventDefault();
+});
+document.addEventListener('mousemove', e => {
+  if (!isResizing) return;
+  const mainRect = document.getElementById('main').getBoundingClientRect();
+  const newWidth = mainRect.right - e.clientX;
+  if (newWidth > 200 && newWidth < 700) sidebar.style.width = newWidth + 'px';
+});
+document.addEventListener('mouseup', () => {
+  isResizing = false;
+  resizeHandle.classList.remove('dragging');
+});
+
+let sidebarCollapsed = false;
+let sidebarWidthBeforeCollapse = '310px';
+function toggleSidebar() {
+  sidebarCollapsed = !sidebarCollapsed;
+  const btn = document.getElementById('sidebar-collapse-btn');
+  if (sidebarCollapsed) {
+    sidebarWidthBeforeCollapse = sidebar.style.width || '310px';
+    sidebar.style.width = '32px';
+    sidebar.classList.add('collapsed');
+    btn.querySelector('.ms').textContent = 'chevron_left';
+  } else {
+    sidebar.style.width = sidebarWidthBeforeCollapse;
+    sidebar.classList.remove('collapsed');
+    btn.querySelector('.ms').textContent = 'chevron_right';
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Run panel
-// ─────────────────────────────────────────────────────────────────────────────
-function submitRun() {
-  const typeEl = document.getElementById('run-type');
-  const inputEl = document.getElementById('run-input');
-  const modelEl = document.getElementById('run-model');
-  const agentType = typeEl.value;
-  const input = inputEl.value.trim();
-  const model = modelEl.value || undefined;
-  if (!input) { alert('Please enter a prompt.'); return; }
-
-  vscode.postMessage({ type: 'runAgent', agentType, input, model });
-  inputEl.value = '';
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Create panel
-// ─────────────────────────────────────────────────────────────────────────────
-function submitCreate() {
-  const name = document.getElementById('create-name').value.trim();
-  const systemPrompt = document.getElementById('create-prompt').value.trim();
-  if (!name || !systemPrompt) { alert('Name and system prompt are required.'); return; }
-
-  const powers = [...document.querySelectorAll('#panel-create input[type=checkbox]:checked')]
-    .map(cb => cb.value);
-  if (powers.length === 0) powers.push('none');
-
-  const model = document.getElementById('create-model').value || undefined;
-
-  vscode.postMessage({
-    type: 'createAgent',
-    config: { name, type: 'custom', systemPrompt, powers, model }
+// ── Tabs ───────────────────────────────────────────────────────────────────
+const TABS=['detail','run','create','schedule','memory','usage','history','log'];
+function switchTab(name) {
+  TABS.forEach(t=>{
+    document.getElementById('panel-'+t).style.display=t===name?'block':'none';
+    document.getElementById('tab-'+t).classList.toggle('active',t===name);
   });
-
-  // Reset form
-  document.getElementById('create-name').value = '';
-  document.getElementById('create-prompt').value = '';
-  document.querySelectorAll('#panel-create input[type=checkbox]').forEach(cb => cb.checked = false);
-
-  const fb = document.getElementById('create-feedback');
-  fb.textContent = `Agent "${name}" created!`;
-  fb.style.display = 'block';
-  setTimeout(() => fb.style.display = 'none', 3000);
+  if (name==='memory') vscode.postMessage({type:'requestMemory'});
+  if (name==='usage')  vscode.postMessage({type:'requestUsage'});
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Graph actions
-// ─────────────────────────────────────────────────────────────────────────────
-function clearGraph() {
-  if (!confirm('Clear all agents and reset the graph?')) return;
-  vscode.postMessage({ type: 'clearGraph' });
+// ── Output modal ───────────────────────────────────────────────────────────
+let modalNodeId = null;
+function openModal(nodeId) {
+  modalNodeId = nodeId;
+  const node = nodes.get(nodeId);
+  if (!node?.output) return;
+  document.getElementById('output-modal-icon').textContent = TYPE_ICONS[node.type]||'tune';
+  document.getElementById('output-modal-icon').style.color = TYPE_COLOR[node.type]||'var(--accent)';
+  document.getElementById('output-modal-title').textContent = node.name + ' — Output';
+  document.getElementById('output-modal-body').textContent = node.output;
+  document.getElementById('output-modal').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('output-modal').classList.remove('show');
+  modalNodeId = null;
+}
+document.getElementById('output-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('output-modal')) closeModal();
+});
+function modalCopy() { const n=nodes.get(modalNodeId); if(n?.output) vscode.postMessage({type:'copyOutput',text:n.output}); }
+function modalDiff()  { if(modalNodeId) vscode.postMessage({type:'applyDiff',nodeId:modalNodeId}); }
+function modalInsert(){ if(modalNodeId) vscode.postMessage({type:'insertInline',nodeId:modalNodeId}); }
+function modalExport(){ if(modalNodeId) vscode.postMessage({type:'exportMarkdown',nodeId:modalNodeId}); }
+
+// ── Run ────────────────────────────────────────────────────────────────────
+function onRunTypeChange() {
+  const v=document.getElementById('run-type').value;
+  document.getElementById('custom-agent-section').style.display=v==='__custom__'?'block':'none';
 }
 
-function cancelAgent(id) {
-  vscode.postMessage({ type: 'cancelAgent', id });
+function submitRun() {
+  const typeEl=document.getElementById('run-type');
+  const input=document.getElementById('run-input').value.trim();
+  const model=document.getElementById('run-model').value||undefined;
+  const useContext=document.getElementById('run-use-context').checked;
+  if(!input){alert('Please enter a prompt.');return;}
+  if(typeEl.value==='__custom__') {
+    const agentId=document.getElementById('run-custom-select').value;
+    vscode.postMessage({type:'runCustom',agentId,input,model,useContext});
+  } else {
+    vscode.postMessage({type:'runAgent',agentType:typeEl.value,input,model,useContext});
+  }
+  document.getElementById('run-input').value='';
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Log
-// ─────────────────────────────────────────────────────────────────────────────
-function appendLog(text, level) {
-  const area = document.getElementById('log-area');
-  const line = document.createElement('div');
-  line.className = 'log-line ' + level;
-  const now = new Date().toLocaleTimeString();
-  line.textContent = `[${now}] ${text}`;
-  area.appendChild(line);
-  area.scrollTop = area.scrollHeight;
+// ── Create ─────────────────────────────────────────────────────────────────
+function submitCreate() {
+  const name=document.getElementById('create-name').value.trim();
+  const systemPrompt=document.getElementById('create-prompt').value.trim();
+  if(!name||!systemPrompt){alert('Name and system prompt are required.');return;}
+  const powers=[...document.querySelectorAll('#panel-create input[type=checkbox]:checked')].map(cb=>cb.value);
+  if(!powers.length) powers.push('none');
+  const model=document.getElementById('create-model').value||undefined;
+  vscode.postMessage({type:'createAgent',config:{name,type:'custom',systemPrompt,powers,model}});
+  document.getElementById('create-name').value='';
+  document.getElementById('create-prompt').value='';
+  document.querySelectorAll('#panel-create input[type=checkbox]').forEach(cb=>cb.checked=false);
+  const fb=document.getElementById('create-feedback');
+  fb.textContent=`Agent "${name}" created!`; fb.style.display='block';
+  setTimeout(()=>fb.style.display='none',3000);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Extension message handler
-// ─────────────────────────────────────────────────────────────────────────────
-window.addEventListener('message', e => {
-  const msg = e.data;
-  switch (msg.type) {
-    case 'addNode': {
-      nodes.set(msg.node.id, msg.node);
+// ── Schedule ───────────────────────────────────────────────────────────────
+function submitSchedule() {
+  const agentType=document.getElementById('sched-type').value;
+  const cronExpr=document.getElementById('sched-interval').value;
+  const input=document.getElementById('sched-input').value.trim();
+  if(!input){alert('Please enter a prompt for the scheduled agent.');return;}
+  vscode.postMessage({type:'scheduleAgent',agentType,cronExpr,input});
+  const fb=document.getElementById('sched-feedback');
+  fb.textContent=`Scheduled ${agentType} (${cronExpr})`; fb.style.display='block';
+  setTimeout(()=>fb.style.display='none',3000);
+}
+
+// ── History ────────────────────────────────────────────────────────────────
+function renderHistory(entries) {
+  const list=document.getElementById('history-list');
+  const count=document.getElementById('hist-count');
+  count.textContent=entries.length?`${entries.length} entries`:'No history yet';
+  list.innerHTML='';
+  entries.slice(0,100).forEach(e=>{
+    const d=document.createElement('div');
+    d.className='hist-entry';
+    d.innerHTML=`
+      <div class="he-header">
+        <span class="ms sm" style="color:${TYPE_COLOR[e.agentType]||'var(--text)'}">${TYPE_ICONS[e.agentType]||'tune'}</span>
+        <span class="he-name">${esc(e.agentName)}</span>
+        <span class="badge ${e.success?'done':'error'}">${e.success?'done':'error'}</span>
+        <span class="he-time">${new Date(e.timestamp).toLocaleTimeString()}</span>
+      </div>
+      <div class="he-input">${esc(e.input.slice(0,80))}</div>
+      <div class="he-out">${esc(e.output)}</div>`;
+    d.onclick=()=>d.classList.toggle('expanded');
+    list.appendChild(d);
+  });
+}
+
+// ── Graph actions ──────────────────────────────────────────────────────────
+function clearGraph() { if(confirm('Clear all agents?')) vscode.postMessage({type:'clearGraph'}); }
+
+// ── Log ────────────────────────────────────────────────────────────────────
+function appendLog(text,level) {
+  const area=document.getElementById('log-area');
+  const line=document.createElement('div');
+  line.className='log-line '+level;
+  line.textContent=`[${new Date().toLocaleTimeString()}] ${text}`;
+  area.appendChild(line); area.scrollTop=area.scrollHeight;
+}
+
+// ── Context badge ──────────────────────────────────────────────────────────
+function updateCtxBadge(ctx) {
+  currentCtx=ctx;
+  const badge=document.getElementById('ctx-badge');
+  const info=document.getElementById('run-ctx-info');
+  if(ctx?.fileName) {
+    badge.textContent=`📎 ${ctx.fileName}`;
+    badge.title=ctx.filePath||'';
+    info.textContent=ctx.selection?`Selection: ${ctx.selection.length} chars`:`File: ${ctx.fileName}`;
+  } else {
+    badge.textContent='No file open';
+    info.textContent='';
+  }
+}
+
+// ── Custom agents list ─────────────────────────────────────────────────────
+function updateCustomAgentList(agents) {
+  customAgents=agents;
+  const sel=document.getElementById('run-custom-select');
+  sel.innerHTML=agents.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  const opt=document.getElementById('custom-opt');
+  opt.style.display=agents.length?'block':'none';
+}
+
+// ── Memory render ──────────────────────────────────────────────────────────
+const MEM_ICONS = { user:'person', feedback:'feedback', project:'folder_open', reference:'link', unknown:'note' };
+const MEM_COLORS = { user:'var(--running)', feedback:'var(--warn)', project:'var(--ok)', reference:'var(--accent2)', unknown:'var(--muted)' };
+
+function renderMemory(files) {
+  const list = document.getElementById('memory-list');
+  const count = document.getElementById('mem-count');
+  count.textContent = files.length ? `${files.length} memories` : 'No memory files found';
+  if (!files.length) { list.innerHTML = `<p style="color:var(--muted);font-size:11px">No .claude/projects/*/memory/ files found.</p>`; return; }
+
+  const grouped = {};
+  for (const f of files) { (grouped[f.type]??=[]).push(f); }
+  const order = ['user','feedback','project','reference','unknown'];
+
+  list.innerHTML = order.filter(t=>grouped[t]).map(type => `
+    <div class="mem-section">
+      <div class="mem-section-title">
+        <span class="ms sm" style="color:${MEM_COLORS[type]}">${MEM_ICONS[type]}</span>
+        ${type}
+        <span style="color:var(--muted)">(${grouped[type].length})</span>
+      </div>
+      ${grouped[type].map(f=>`
+        <div class="mem-card" onclick="this.classList.toggle('expanded')">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <div class="mc-name">${esc(f.name)}</div>
+            <span class="mem-type-badge ${f.type}">${f.type}</span>
+          </div>
+          <div class="mc-desc">${esc(f.description)}</div>
+          <div class="mc-body">${esc(f.body)}</div>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+// ── Usage render ───────────────────────────────────────────────────────────
+function renderUsage(stats) {
+  document.getElementById('us-total').textContent = stats.totalRuns;
+  document.getElementById('us-rate').textContent = stats.successRate + '%';
+  document.getElementById('us-rate').style.color = stats.successRate > 80 ? 'var(--ok)' : stats.successRate > 50 ? 'var(--warn)' : 'var(--err)';
+
+  // Bars
+  const bars = document.getElementById('us-bars');
+  const types = Object.entries(stats.byType).sort((a,b)=>b[1].runs-a[1].runs);
+  const maxRuns = types[0]?.[1].runs || 1;
+  bars.innerHTML = types.map(([type, d]) => `
+    <div class="usage-bar-row">
+      <div class="usage-bar-label" title="${type}">
+        <span class="ms sm" style="color:${TYPE_COLOR[type]||'var(--muted)'};font-size:12px">${TYPE_ICONS[type]||'tune'}</span>
+        ${type.replace(/-/g,' ')}
+      </div>
+      <div class="usage-bar-track">
+        <div class="usage-bar-fill" style="width:${Math.round(d.runs/maxRuns*100)}%;background:${TYPE_COLOR[type]||'var(--accent)'}"></div>
+      </div>
+      <div class="usage-bar-count">${d.runs}</div>
+    </div>
+    <div style="font-size:9px;color:var(--muted);margin:-3px 0 5px 97px">avg ${(d.avgDuration/1000).toFixed(1)}s · ${d.errors} err</div>
+  `).join('');
+
+  // Timeline dots
+  const tl = document.getElementById('timeline-wrap');
+  tl.innerHTML = stats.recentRuns.map(r =>
+    `<span class="timeline-dot" style="background:${r.success?'var(--ok)':'var(--err)'}" title="${r.agentType} · ${(r.durationMs/1000).toFixed(1)}s · ${new Date(r.timestamp).toLocaleTimeString()}"></span>`
+  ).join('');
+}
+
+// ── Message handler ────────────────────────────────────────────────────────
+window.addEventListener('message', e=>{
+  const msg=e.data;
+  switch(msg.type){
+    case 'addNode':
+      nodes.set(msg.node.id,msg.node);
       getOrCreatePos(msg.node.id);
-      if (selectedId === msg.node.id) renderDetail();
+      if(selectedId===msg.node.id) renderDetail();
       break;
-    }
     case 'updateNode': {
-      const n = nodes.get(msg.id);
-      if (n) {
-        Object.assign(n, msg.patch);
-        if (selectedId === msg.id) renderDetail();
-      }
+      const n=nodes.get(msg.id);
+      if(n){ Object.assign(n,msg.patch); if(selectedId===msg.id) renderDetail(); }
       break;
     }
-    case 'addEdge': {
-      if (!edges.find(e => e.from === msg.from && e.to === msg.to)) {
-        edges.push({ from: msg.from, to: msg.to });
-      }
+    case 'addEdge':
+      if(!edges.find(e=>e.from===msg.from&&e.to===msg.to)) edges.push({from:msg.from,to:msg.to});
       break;
-    }
-    case 'clear': {
-      nodes.clear();
-      edges.length = 0;
-      layout.clear();
-      selectedId = null;
-      renderDetail();
+    case 'clear':
+      nodes.clear(); edges.length=0; layout.clear(); selectedId=null; renderDetail();
       break;
-    }
-    case 'log': {
-      appendLog(msg.text, msg.level);
+    case 'log':
+      appendLog(msg.text,msg.level);
       break;
-    }
+    case 'history':
+      renderHistory(msg.entries);
+      break;
+    case 'context':
+      updateCtxBadge(msg.ctx);
+      break;
+    case 'agentList':
+      updateCustomAgentList(msg.custom||[]);
+      break;
+    case 'memory':
+      renderMemory(msg.files||[]);
+      break;
+    case 'usage':
+      renderUsage(msg.stats);
+      break;
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Boot — tell extension we're ready so it can replay state
-// ─────────────────────────────────────────────────────────────────────────────
-vscode.postMessage({ type: 'ready' });
+vscode.postMessage({type:'ready'});
 
-// Builtin agents injected at render time
 const BUILTIN_AGENTS = __BUILTIN_AGENTS__;
 </script>
 </body>

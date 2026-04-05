@@ -1,10 +1,10 @@
 export type AgentStatus = 'idle' | 'running' | 'done' | 'error' | 'cancelled';
 
 export type AgentPower =
-  | 'files'      // Read, Write, Edit, Glob, Grep
-  | 'terminal'   // Bash
-  | 'web'        // WebFetch, WebSearch
-  | 'todos'      // TodoWrite
+  | 'files'
+  | 'terminal'
+  | 'web'
+  | 'todos'
   | 'none';
 
 export type AgentType =
@@ -13,7 +13,24 @@ export type AgentType =
   | 'researcher'
   | 'coder'
   | 'summarizer'
+  | 'git-commit'
+  | 'pr-description'
+  | 'test-writer'
+  | 'bug-finder'
+  | 'docs-writer'
+  | 'refactor'
   | 'custom';
+
+export interface EditorContext {
+  filePath?: string;
+  fileName?: string;
+  language?: string;
+  selection?: string;
+  fullContent?: string;
+  workspaceFolder?: string;
+  claudeMd?: string;        // contents of CLAUDE.md if present
+  extraFiles?: Array<{ path: string; content: string }>;
+}
 
 export interface AgentConfig {
   id: string;
@@ -22,6 +39,17 @@ export interface AgentConfig {
   systemPrompt: string;
   powers: AgentPower[];
   model?: string;
+}
+
+export interface HistoryEntry {
+  id: string;
+  agentName: string;
+  agentType: AgentType;
+  input: string;
+  output: string;
+  timestamp: number;
+  durationMs: number;
+  success: boolean;
 }
 
 export interface AgentNode extends AgentConfig {
@@ -33,8 +61,8 @@ export interface AgentNode extends AgentConfig {
   children: string[];
   startTime?: number;
   endTime?: number;
-  /** streaming chunks before full output is ready */
   streamBuffer?: string;
+  context?: EditorContext;
 }
 
 export interface RunResult {
@@ -44,24 +72,54 @@ export interface RunResult {
   error?: string;
 }
 
+export interface MemoryFile {
+  name: string;
+  type: 'user' | 'feedback' | 'project' | 'reference' | 'unknown';
+  description: string;
+  body: string;
+  file: string;
+}
+
+export interface UsageStats {
+  totalRuns: number;
+  successRate: number;
+  byType: Record<string, { runs: number; avgDuration: number; errors: number }>;
+  recentRuns: Array<{ agentType: string; durationMs: number; success: boolean; timestamp: number }>;
+}
+
 /** Messages sent from Extension Host → WebView */
 export type ExtToWebMsg =
-  | { type: 'addNode';    node: AgentNode }
-  | { type: 'updateNode'; id: string; patch: Partial<AgentNode> }
-  | { type: 'addEdge';    from: string; to: string }
+  | { type: 'addNode';       node: AgentNode }
+  | { type: 'updateNode';    id: string; patch: Partial<AgentNode> }
+  | { type: 'addEdge';       from: string; to: string }
   | { type: 'clear' }
-  | { type: 'log';        text: string; level: 'info' | 'warn' | 'error' };
+  | { type: 'log';           text: string; level: 'info' | 'warn' | 'error' }
+  | { type: 'history';       entries: HistoryEntry[] }
+  | { type: 'context';       ctx: EditorContext }
+  | { type: 'agentList';     builtins: Array<Omit<AgentConfig,'id'>>; custom: AgentConfig[] }
+  | { type: 'activeAgents';  count: number }
+  | { type: 'memory';        files: MemoryFile[] }
+  | { type: 'usage';         stats: UsageStats };
 
 /** Messages sent from WebView → Extension Host */
 export type WebToExtMsg =
-  | { type: 'runAgent';      agentType: AgentType; input: string; model?: string }
+  | { type: 'runAgent';      agentType: AgentType; input: string; model?: string; useContext?: boolean }
+  | { type: 'runCustom';     agentId: string; input: string; model?: string; useContext?: boolean }
   | { type: 'createAgent';   config: Omit<AgentConfig, 'id'> }
   | { type: 'selectNode';    id: string }
   | { type: 'cancelAgent';   id: string }
   | { type: 'clearGraph' }
-  | { type: 'ready' };
+  | { type: 'ready' }
+  | { type: 'applyDiff';     nodeId: string }
+  | { type: 'insertInline';  nodeId: string }
+  | { type: 'copyOutput';    text: string }
+  | { type: 'exportMarkdown'; nodeId: string }
+  | { type: 'openHistory' }
+  | { type: 'addEdge';       from: string; to: string }
+  | { type: 'scheduleAgent'; agentType: AgentType; cronExpr: string; input: string }
+  | { type: 'requestMemory' }
+  | { type: 'requestUsage' };
 
-/** What the claude CLI returns for --output-format json */
 export interface ClaudeJsonResult {
   type: 'result';
   subtype: 'success' | 'error_during_execution';
@@ -72,7 +130,6 @@ export interface ClaudeJsonResult {
   num_turns: number;
 }
 
-/** Power → allowed tool names for --allowedTools flag */
 export const POWER_TOOLS: Record<AgentPower, string[]> = {
   files:    ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
   terminal: ['Bash'],
