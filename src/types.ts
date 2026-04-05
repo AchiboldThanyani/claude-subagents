@@ -63,6 +63,9 @@ export interface AgentNode extends AgentConfig {
   endTime?: number;
   streamBuffer?: string;
   context?: EditorContext;
+  sessionId?: string;         // claude --session-id, used to --resume later
+  turns: number;              // how many messages have been exchanged
+  messages: Array<{ role: 'user' | 'assistant'; text: string; timestamp: number }>;
 }
 
 export interface RunResult {
@@ -117,6 +120,7 @@ export type WebToExtMsg =
   | { type: 'openHistory' }
   | { type: 'addEdge';       from: string; to: string }
   | { type: 'scheduleAgent'; agentType: AgentType; cronExpr: string; input: string }
+  | { type: 'continueConversation'; nodeId: string; message: string }
   | { type: 'requestMemory' }
   | { type: 'requestUsage' };
 

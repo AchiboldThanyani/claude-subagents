@@ -172,6 +172,15 @@ export class AgentGraphPanel {
         break;
       }
 
+      case 'continueConversation': {
+        const { nodeId, message } = msg;
+        if (!message.trim()) return;
+        const ctx = ContextManager.capture();
+        this.orchestrator.continueConversation(nodeId, message, ctx)
+          .catch((err: Error) => vscode.window.showErrorMessage(`Continue error: ${err.message}`));
+        break;
+      }
+
       case 'openHistory': {
         this.panel.webview.postMessage({ type: 'history', entries: this.history.getAll() } satisfies ExtToWebMsg);
         break;

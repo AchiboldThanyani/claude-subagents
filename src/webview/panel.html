@@ -136,6 +136,20 @@
   .usage-bar-count{font-size:10px;color:var(--muted);width:28px;text-align:right;flex-shrink:0}
   .timeline-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin:1px;vertical-align:middle}
   #timeline-wrap{display:flex;flex-wrap:wrap;gap:2px;padding:6px 0}
+
+  /* ── Conversation thread ── */
+  .conv-thread{margin-top:10px;border-top:1px solid var(--border);padding-top:8px}
+  .conv-message{margin-bottom:8px}
+  .conv-role{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;display:flex;align-items:center;gap:4px}
+  .conv-role.user{color:var(--accent)}
+  .conv-role.assistant{color:var(--accent2)}
+  .conv-bubble{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:10px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow-y:auto}
+  .conv-bubble.user{border-color:rgba(124,106,247,.3)}
+  .conv-bubble.assistant{border-color:rgba(94,234,212,.3)}
+  .conv-turns{font-size:10px;color:var(--muted);margin-bottom:6px}
+  .conv-input-wrap{display:flex;gap:5px;margin-top:8px;align-items:flex-end}
+  .conv-input-wrap textarea{min-height:44px;resize:none;font-size:11px}
+  .conv-send-btn{flex-shrink:0;padding:6px 8px;align-self:flex-end}
 </style>
 </head>
 <body>
@@ -607,6 +621,33 @@ function renderDetail() {
   const cancelBtn = node.status==='running'
     ? `<button class="danger sm" style="margin-top:8px;width:100%" onclick="vscode.postMessage({type:'cancelAgent',id:'${node.id}'})"><span class="ms sm">stop_circle</span> Cancel</button>` : '';
 
+  // Conversation thread — skip first user message (shown as Input) and first assistant reply (shown as Output)
+  const msgs = node.messages || [];
+  const threadMsgs = msgs.slice(2); // after initial exchange
+  const threadHtml = msgs.length > 0 ? `
+    <div class="conv-thread">
+      <div class="section-label" style="display:flex;align-items:center;gap:6px">
+        <span class="ms sm">forum</span> Conversation
+        ${node.turns > 0 ? `<span class="conv-turns">${node.turns} turn${node.turns!==1?'s':''}</span>` : ''}
+      </div>
+      ${threadMsgs.map(m=>`
+        <div class="conv-message">
+          <div class="conv-role ${m.role}">
+            <span class="ms sm">${m.role==='user'?'person':'smart_toy'}</span>
+            ${m.role}
+            <span style="color:var(--muted);font-weight:400">${new Date(m.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <div class="conv-bubble ${m.role}">${esc(m.text.slice(0,400))}${m.text.length>400?'\n…':''}</div>
+        </div>`).join('')}
+      ${node.status!=='running' ? `
+        <div class="conv-input-wrap">
+          <textarea id="conv-input-${node.id}" placeholder="Follow up… e.g. 'now fix that bug'" onkeydown="handleConvKey(event,'${node.id}')"></textarea>
+          <button class="conv-send-btn" onclick="sendContinue('${node.id}')">
+            <span class="ms sm">send</span>
+          </button>
+        </div>` : '<div style="font-size:10px;color:var(--running);margin-top:6px"><span class="ms sm">hourglass_top</span> Responding…</div>'}
+    </div>` : '';
+
   detail.innerHTML=`
     <div class="detail-header">
       <div class="agent-icon" style="background:${STATUS_BG[node.status]};border:1.5px solid ${STATUS_COLOR[node.status]}"><span class="ms" style="color:${TYPE_COLOR[node.type]||'var(--text)'};font-size:16px">${TYPE_ICONS[node.type]||'tune'}</span></div>
@@ -615,7 +656,7 @@ function renderDetail() {
     </div>
     ${pwrHtml}
     ${node.input?`<div class="section-label">Input</div><div class="output-box">${esc(node.input.slice(0,300))}${node.input.length>300?'…':''}</div>`:''}
-    ${outputHtml}${errHtml}${cancelBtn}`;
+    ${outputHtml}${errHtml}${cancelBtn}${threadHtml}`;
 }
 
 function copyOutput() {
@@ -630,6 +671,23 @@ function insertInline() {
 }
 function exportMd() {
   if(selectedId) vscode.postMessage({type:'exportMarkdown',nodeId:selectedId});
+}
+
+function sendContinue(nodeId) {
+  const input = document.getElementById('conv-input-' + nodeId);
+  if (!input) return;
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = '';
+  vscode.postMessage({ type: 'continueConversation', nodeId, message });
+}
+
+function handleConvKey(e, nodeId) {
+  // Ctrl+Enter or Cmd+Enter to send
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    sendContinue(nodeId);
+  }
 }
 
 function esc(str) {

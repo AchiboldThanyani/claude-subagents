@@ -4,6 +4,8 @@ import { AgentConfig, POWER_TOOLS, RunResult } from '../types';
 export interface RunOptions {
   onStream?: (chunk: string) => void;
   signal?: AbortSignal;
+  sessionId?: string;   // pass to --session-id on first run
+  resume?: string;      // pass to --resume for follow-up turns
 }
 
 /**
@@ -78,7 +80,13 @@ export async function runAgent(
   return new Promise((resolve) => {
     const claudeArgs = [
       '--dangerously-skip-permissions',
-      '--system-prompt', config.systemPrompt,
+      // Resume an existing session OR start a new one with a fixed ID
+      ...(opts.resume
+        ? ['--resume', opts.resume]
+        : opts.sessionId ? ['--session-id', opts.sessionId] : []
+      ),
+      // System prompt only on first turn — resume keeps the original
+      ...(!opts.resume ? ['--system-prompt', config.systemPrompt] : []),
       ...buildAllowedTools(config),
       ...(config.model ? ['--model', config.model] : []),
     ];

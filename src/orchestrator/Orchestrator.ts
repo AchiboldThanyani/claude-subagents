@@ -10,6 +10,18 @@ function makeId(): string {
     Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
+/** Generate a RFC4122 v4 UUID for claude --session-id */
+function makeSessionId(): string {
+  if ((crypto as unknown as { randomUUID?: () => string }).randomUUID) {
+    return (crypto as unknown as { randomUUID: () => string }).randomUUID();
+  }
+  // Fallback
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
 interface PlanTask {
   id: string;
   name: string;
@@ -139,6 +151,65 @@ export class Orchestrator extends EventEmitter {
     await this.executePlan(plan, plannerNode.id, ctx);
   }
 
+  async continueConversation(nodeId: string, message: string, ctx?: EditorContext): Promise<void> {
+    const node = this.nodes.get(nodeId);
+    if (!node) throw new Error(`Node ${nodeId} not found`);
+    if (!node.sessionId) throw new Error(`Node has no session ID — cannot resume`);
+    if (node.status === 'running') throw new Error(`Agent is already running`);
+
+    // Add user message to history
+    node.messages.push({ role: 'user', text: message, timestamp: Date.now() });
+    this.updateNode(nodeId, {
+      status: 'running',
+      startTime: Date.now(),
+      streamBuffer: '',
+      messages: node.messages,
+    });
+
+    const ctrl = new AbortController();
+    this.abortControllers.set(nodeId, ctrl);
+    this.bumpActive(1);
+
+    const contextBlock = ctx ? ContextManager.buildContextBlock(ctx) : '';
+    let streamAccum = '';
+
+    const result = await runAgent(node, contextBlock + message, {
+      signal: ctrl.signal,
+      resume: node.sessionId,   // --resume keeps full conversation history
+      onStream: (chunk) => {
+        streamAccum += chunk;
+        this.updateNode(nodeId, { streamBuffer: streamAccum });
+      },
+    });
+
+    this.abortControllers.delete(nodeId);
+    this.bumpActive(-1);
+
+    // Append assistant reply to messages
+    const updatedNode = this.nodes.get(nodeId)!;
+    updatedNode.messages.push({ role: 'assistant', text: result.output, timestamp: Date.now() });
+
+    this.updateNode(nodeId, {
+      status: result.success ? 'done' : 'error',
+      output: result.output,
+      error: result.error,
+      streamBuffer: undefined,
+      endTime: Date.now(),
+      turns: updatedNode.turns + 1,
+      messages: updatedNode.messages,
+    });
+
+    this.history.add({
+      agentName: node.name,
+      agentType: node.type,
+      input: message,
+      output: result.output,
+      timestamp: Date.now(),
+      durationMs: result.durationMs,
+      success: result.success,
+    });
+  }
+
   scheduleAgent(agentType: AgentType, cronExpr: string, input: string): string {
     const jobId = makeId();
     const ms = this.cronToMs(cronExpr);
@@ -250,6 +321,7 @@ export class Orchestrator extends EventEmitter {
     let streamAccum = '';
     const result = await runAgent(node, fullInput, {
       signal: ctrl.signal,
+      sessionId: node.sessionId,
       onStream: (chunk) => {
         streamAccum += chunk;
         this.updateNode(node.id, { streamBuffer: streamAccum });
@@ -262,12 +334,17 @@ export class Orchestrator extends EventEmitter {
     const finalStatus = ctrl.signal.aborted ? 'cancelled'
       : result.success ? 'done' : 'error';
 
+    const completedNode = this.nodes.get(node.id)!;
+    completedNode.messages.push({ role: 'assistant', text: result.output, timestamp: Date.now() });
+
     this.updateNode(node.id, {
       status: finalStatus,
       output: result.output,
       error: result.error,
       streamBuffer: undefined,
       endTime: Date.now(),
+      turns: completedNode.turns + 1,
+      messages: completedNode.messages,
     });
 
     // Save to history
@@ -286,7 +363,17 @@ export class Orchestrator extends EventEmitter {
   }
 
   private createNode(config: AgentConfig, input: string, parentId?: string, ctx?: EditorContext): AgentNode {
-    const node: AgentNode = { ...config, status: 'idle', input, parentId, children: [], context: ctx };
+    const node: AgentNode = {
+      ...config,
+      status: 'idle',
+      input,
+      parentId,
+      children: [],
+      context: ctx,
+      sessionId: makeSessionId(),
+      turns: 0,
+      messages: [{ role: 'user', text: input, timestamp: Date.now() }],
+    };
     this.nodes.set(node.id, node);
     if (parentId) {
       const parent = this.nodes.get(parentId);
