@@ -15,7 +15,7 @@ let historyManager: HistoryManager;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Init managers
   historyManager = new HistoryManager(context.globalStorageUri.fsPath);
-  orchestrator = new Orchestrator(historyManager);
+  orchestrator = new Orchestrator(historyManager, context.globalStorageUri.fsPath);
 
   // Status bar
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);

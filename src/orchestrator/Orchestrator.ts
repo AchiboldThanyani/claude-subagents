@@ -1,4 +1,6 @@
 import { EventEmitter } from 'events';
+import * as fs from 'fs';
+import * as path from 'path';
 import { AgentConfig, AgentNode, AgentType, EditorContext, ExtToWebMsg } from '../types';
 import { runAgent } from './AgentRunner';
 import { BUILTIN_AGENTS, PLANNER_AGENT } from './builtinAgents';
@@ -42,11 +44,32 @@ export class Orchestrator extends EventEmitter {
   private customAgents: AgentConfig[] = [];
   private scheduledJobs = new Map<string, ReturnType<typeof setInterval>>();
   private activeCount = 0;
+  private customAgentsFile: string | undefined;
   history: HistoryManager;
 
-  constructor(historyManager: HistoryManager) {
+  constructor(historyManager: HistoryManager, storageDir?: string) {
     super();
     this.history = historyManager;
+    if (storageDir) {
+      fs.mkdirSync(storageDir, { recursive: true });
+      this.customAgentsFile = path.join(storageDir, 'customAgents.json');
+      this.loadCustomAgents();
+    }
+  }
+
+  private loadCustomAgents(): void {
+    if (!this.customAgentsFile || !fs.existsSync(this.customAgentsFile)) return;
+    try {
+      const raw = fs.readFileSync(this.customAgentsFile, 'utf8');
+      this.customAgents = JSON.parse(raw) as AgentConfig[];
+    } catch { /* corrupt file — start fresh */ }
+  }
+
+  private saveCustomAgents(): void {
+    if (!this.customAgentsFile) return;
+    try {
+      fs.writeFileSync(this.customAgentsFile, JSON.stringify(this.customAgents, null, 2), 'utf8');
+    } catch { /* non-fatal */ }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -57,6 +80,7 @@ export class Orchestrator extends EventEmitter {
   addCustomAgent(config: Omit<AgentConfig, 'id'>): AgentConfig {
     const agent: AgentConfig = { ...config, id: makeId() };
     this.customAgents.push(agent);
+    this.saveCustomAgents();
     this.log(`Custom agent "${agent.name}" registered`, 'info');
     this.emitAgentList();
     return agent;

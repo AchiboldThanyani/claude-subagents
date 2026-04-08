@@ -92,7 +92,7 @@
   /* ── Resizable sidebar ── */
   #resize-handle{width:5px;background:transparent;cursor:col-resize;flex-shrink:0;transition:background .15s;z-index:10}
   #resize-handle:hover,#resize-handle.dragging{background:var(--accent)}
-  #sidebar{min-width:220px;max-width:600px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;position:relative}
+  #sidebar{min-width:220px;max-width:calc(100vw - 80px);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;position:relative}
   #sidebar-collapse-btn{position:absolute;top:6px;right:6px;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;border-radius:4px;z-index:5;font-size:10px;display:flex;align-items:center}
   #sidebar-collapse-btn:hover{color:var(--text);background:var(--border)}
   #sidebar.collapsed{min-width:32px;width:32px!important}
@@ -708,7 +708,8 @@ document.addEventListener('mousemove', e => {
   if (!isResizing) return;
   const mainRect = document.getElementById('main').getBoundingClientRect();
   const newWidth = mainRect.right - e.clientX;
-  if (newWidth > 200 && newWidth < 700) sidebar.style.width = newWidth + 'px';
+  const maxWidth = document.getElementById('main').clientWidth - 80;
+  if (newWidth > 200 && newWidth < maxWidth) sidebar.style.width = newWidth + 'px';
 });
 document.addEventListener('mouseup', () => {
   isResizing = false;

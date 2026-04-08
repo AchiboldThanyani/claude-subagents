@@ -4,14 +4,28 @@ import { AgentConfig, POWER_TOOLS, RunResult } from '../types';
 export interface RunOptions {
   onStream?: (chunk: string) => void;
   signal?: AbortSignal;
-  sessionId?: string;   // pass to --session-id on first run
-  resume?: string;      // pass to --resume for follow-up turns
+  sessionId?: string;
+  resume?: string;
 }
 
-/**
- * On Windows, spawn via cmd.exe so VS Code's extension host
- * inherits the full user PATH (where claude.cmd lives).
- */
+// ── Silence timeouts (ms) ──────────────────────────────────────────────────
+const SILENCE_IDLE      = 45_000;  // 45s: Claude can think silently before responding
+const SILENCE_TOOL_USE  = 60_000;  // 60s: extended when tool use is in progress
+const HARD_TIMEOUT      = 300_000; // 5 minutes absolute max
+
+// ── Patterns that indicate Claude is actively working (not done) ───────────
+const TOOL_USE_PATTERNS = [
+  /Reading\s+\d+\s+file/i,
+  /Searching\s+for/i,
+  /Running\s+bash/i,
+  /Writing\s+to/i,
+  /Editing/i,
+  /Bash\s+command/i,
+  /Listing\s+\d+/i,
+  /●+/,                         // progress dots
+  /\bls\b|\bfind\b|\bgrep\b/,   // common shell commands in output
+];
+
 function resolveSpawn(extraArgs: string[]): { file: string; args: string[] } {
   if (process.platform === 'win32') {
     return { file: 'cmd.exe', args: ['/c', 'claude', ...extraArgs] };
@@ -33,7 +47,6 @@ function stripAnsi(str: string): string {
     .replace(/\r/g, '');
 }
 
-/** Known UI chrome lines to strip from final output */
 const CHROME_PATTERNS = [
   /^Welcome back .+!$/,
   /Claude Code v\d/,
@@ -43,14 +56,26 @@ const CHROME_PATTERNS = [
   /Recent activity/,
   /No recent activity/,
   /^\s*>\s*$/,
-  /^[▐▛▜▝▞▟█▘▙╭╮╰╯│]+\s*$/,  // pure box-drawing lines
-  /^─{10,}$/,                   // long separator lines only
+  /^[▐▛▜▝▞▟█▘▙╭╮╰╯│]+\s*$/,
+  /^─{10,}$/,
   /Pollinating…|Bloviating…|Ruminating…|Cogitating…|Contemplating…/,
   /Deliberating…|Meditating…|Pondering…|Perambulating…|Theorizing…/,
   /esc to interrupt/i,
   /Do you want to proceed/i,
   /Use skill ".*:.*"\?/,
+  /bypass permissions/i,
+  /shift\+tab to cycle/i,
+  /ctrl\+g to edit/i,
+  /^[◐◑◒◓⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s/,   // spinner chars at line start
+  /·\s*\/\w+/,                   // status indicators like ·/effort
+  /^\s*\d+\s+\w+\.ts\b/,         // file listings from status bar
+  /lukhwaren|Organization$/,
+  /AppData.+Programs.+VSCode/i,
+  /claude\.ai|anthropic\.com/i,
 ];
+
+// Decoration chars used in Claude Code's animated spinner / thinking display
+const DECORATION_CHARS = /[✶✻✽✸✼✾●✢·✦✧✨✩✪✫✬✭✮✯✰✱✲✳✴✵✺✹▸▹►▻◂◃◄◅◆◇◈◉◊◌◍◎◐◑◒◓◔◕↓↑←→⏵⏶⏷⏸⏹⏺*]/g;
 
 function cleanOutput(raw: string): string {
   return stripAnsi(raw)
@@ -65,13 +90,50 @@ function cleanOutput(raw: string): string {
 }
 
 /**
- * Run an agent via a real PTY so Claude uses the Pro subscription.
- *
- * Strategy:
- *   1. Spawn claude in a PTY (so it thinks it's interactive)
- *   2. On first output → wait 1.5s for the banner to finish → send prompt
- *   3. After prompt sent → 3s silence → finish
+ * Aggressive cleaner for live stream chunks.
+ * Claude Code's TUI uses cursor-position ANSI to animate spinners in-place.
+ * Stripping ANSI leaves all animation frames piled up as visible text.
+ * This function collapses that noise so only real content gets displayed.
  */
+function cleanStreamChunk(raw: string): string {
+  let text = stripAnsi(raw);
+
+  // ── Strip decoration/spinner unicode chars ─────────────────────────────
+  text = text.replace(DECORATION_CHARS, '');
+
+  // ── Strip "thinking" spam from extended thinking mode ─────────────────
+  text = text.replace(/\bthinking\b/g, '');
+
+  // ── Strip token counts and timing blurbs ──────────────────────────────
+  text = text.replace(/\d+(?:\.\d+)?[km]?\s*tokens?\b[^\n]*/gi, '');
+  text = text.replace(/thought for \d+s\b/gi, '');
+  text = text.replace(/\d+m\s*\d+s\b/g, '');
+  text = text.replace(/\(\s*\d+[ms]\s*\d*[ms]?[^)]*\)/g, '');   // (10s · ↓ …)
+
+  // ── Strip ctrl+key hints and status bar fragments ─────────────────────
+  text = text.replace(/\(ctrl\+\w[^)]*\)/gi, '');
+  text = text.replace(/bypass permissions[^\n]*/gi, '');
+  text = text.replace(/shift\+tab[^\n]*/gi, '');
+  text = text.replace(/Claude Code has switched[^\n]*/gi, '');
+  text = text.replace(/Run `claude install[^\n]*/gi, '');
+
+  // ── Per-line filter ────────────────────────────────────────────────────
+  const lines = text.split('\n').filter(line => {
+    const t = line.trim();
+    if (!t || t.length < 2) return false;
+    if (CHROME_PATTERNS.some(p => p.test(t))) return false;
+
+    // Drop lines that are mostly numbers/symbols — artifact of overwrite-strip
+    const letters = (t.match(/[a-zA-Z]/g) ?? []).length;
+    const total   = t.replace(/\s/g, '').length;
+    if (total > 6 && letters / total < 0.25) return false;
+
+    return true;
+  });
+
+  return lines.join('\n').trim();
+}
+
 export async function runAgent(
   config: AgentConfig,
   input: string,
@@ -80,12 +142,10 @@ export async function runAgent(
   return new Promise((resolve) => {
     const claudeArgs = [
       '--dangerously-skip-permissions',
-      // Resume an existing session OR start a new one with a fixed ID
       ...(opts.resume
         ? ['--resume', opts.resume]
         : opts.sessionId ? ['--session-id', opts.sessionId] : []
       ),
-      // System prompt only on first turn — resume keeps the original
       ...(!opts.resume ? ['--system-prompt', config.systemPrompt] : []),
       ...buildAllowedTools(config),
       ...(config.model ? ['--model', config.model] : []),
@@ -109,50 +169,69 @@ export async function runAgent(
     let finished = false;
     let trustConfirmed = false;
     let bypassConfirmed = false;
+    let toolUseActive = false;  // tracks whether Claude is mid-tool-call
 
-    const finish = () => {
+    // ── Fix B: preserve partial output on finish, distinguish timeout vs done ──
+    const finish = (timedOut = false) => {
       if (finished) return;
       finished = true;
       if (silenceTimer) clearTimeout(silenceTimer);
       try { term.kill(); } catch { /* already dead */ }
+      const output = cleanOutput(rawOutput);
       resolve({
-        success: true,
-        output: cleanOutput(rawOutput),
+        success: !timedOut || output.length > 0,
+        output,
         durationMs: Date.now() - start,
+        // On hard timeout, surface a warning but keep partial output
+        error: timedOut && output.length === 0
+          ? 'Agent timed out with no output. Claude may not have started.'
+          : timedOut
+          ? 'Agent hit the time limit — output may be incomplete.'
+          : undefined,
       });
     };
 
+    // ── Fix A: adaptive silence timeout ────────────────────────────────────
     const resetSilence = () => {
       if (!promptSent) return;
       if (silenceTimer) clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(finish, 10000);
+      // Use a longer timeout if Claude is in the middle of tool use
+      const timeout = toolUseActive ? SILENCE_TOOL_USE : SILENCE_IDLE;
+      silenceTimer = setTimeout(() => finish(false), timeout);
     };
 
     term.onData((data: string) => {
       rawOutput += data;
       const clean = stripAnsi(data);
-      // Only suppress spinner animation chunks from streaming — let everything else through
-      const isSpinner = /(?:Pollinating|Bloviating|Ruminating|Cogitating|Contemplating|Deliberating|Meditating|Pondering|Perambulating|Theorizing)/.test(clean);
-      if (clean.trim() && !isSpinner) opts.onStream?.(clean);
+
+      // ── Detect tool use → extend silence window ──────────────────────────
+      if (TOOL_USE_PATTERNS.some(p => p.test(clean))) {
+        toolUseActive = true;
+      }
+      // ── After tool use output arrives, reset toolUseActive ────────────────
+      // If data arrived and it's not a tool pattern, Claude is back to text output
+      if (toolUseActive && !TOOL_USE_PATTERNS.some(p => p.test(clean))) {
+        toolUseActive = false;
+      }
+
+      const streamText = cleanStreamChunk(data);
+      if (streamText.trim()) opts.onStream?.(streamText);
       resetSilence();
 
       const flat = stripAnsi(rawOutput).replace(/\s/g, '').toLowerCase();
-      // Workspace trust prompt — option 1 pre-selected, just press Enter
+
       if (!trustConfirmed && (flat.includes('trustthisfolder') || flat.includes('quicksafetycheck'))) {
         trustConfirmed = true;
         setTimeout(() => term.write('\r'), 300);
       }
-      // Bypass permissions warning — option 1 is "No, exit", option 2 is "Yes, I accept"
-      // Navigate down to option 2 then press Enter
       if (!bypassConfirmed && flat.includes('bypasspermissions')) {
         bypassConfirmed = true;
         setTimeout(() => {
-          term.write('\x1B[B'); // down arrow → select option 2
-          setTimeout(() => term.write('\r'), 150); // Enter to confirm
+          term.write('\x1B[B');
+          setTimeout(() => term.write('\r'), 150);
         }, 400);
       }
 
-      // On first data: wait 1.5s for banner to finish, then send prompt
       if (!firstDataReceived) {
         firstDataReceived = true;
         setTimeout(() => {
@@ -165,27 +244,25 @@ export async function runAgent(
     });
 
     term.onExit(() => {
-      if (!finished) {
-        finished = true;
-        if (silenceTimer) clearTimeout(silenceTimer);
-        resolve({
-          success: true,
-          output: cleanOutput(rawOutput),
-          durationMs: Date.now() - start,
-        });
-      }
+      if (!finished) finish(false);
     });
 
     opts.signal?.addEventListener('abort', () => {
       finished = true;
+      if (silenceTimer) clearTimeout(silenceTimer);
       try { term.kill(); } catch { /* ignore */ }
-      resolve({ success: false, output: '', durationMs: Date.now() - start, error: 'Cancelled' });
+      resolve({
+        success: false,
+        output: cleanOutput(rawOutput),
+        durationMs: Date.now() - start,
+        error: 'Cancelled',
+      });
     });
 
-    // Hard timeout: 2 minutes
-    setTimeout(() => finish(), 120_000);
+    // ── Fix B: hard timeout surfaces partial output as warning ────────────
+    setTimeout(() => finish(true), HARD_TIMEOUT);
 
-    // No output at all after 12s → claude not found
+    // No output after 12s → Claude not found on PATH
     setTimeout(() => {
       if (!firstDataReceived && !finished) {
         finished = true;
