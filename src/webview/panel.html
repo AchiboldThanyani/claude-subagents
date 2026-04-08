@@ -6,21 +6,30 @@
   content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Claude Subagents</title>
 <style>
   :root {
-    --bg:#1e1e2e; --surface:#2a2a3e; --border:#3a3a5c;
+    --bg:#0d0e14; --surface:#13141c; --border:#1e2030;
     --accent:#7c6af7; --accent2:#5eead4;
-    --text:#cdd6f4; --muted:#6c7086;
+    --text:#cdd6f4; --muted:#555870;
     --ok:#a6e3a1; --err:#f38ba8; --warn:#f9e2af; --running:#89b4fa;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
-  #topbar{display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
-  #topbar h1{font-size:13px;font-weight:600;color:var(--accent);flex:1;white-space:nowrap}
-  .ctx-badge{font-size:10px;background:rgba(94,234,212,.12);border:1px solid rgba(94,234,212,.3);color:var(--accent2);border-radius:4px;padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans','Segoe UI',system-ui,sans-serif;font-size:13px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  #topbar{display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+  #topbar-left{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+  #topbar-actions{display:flex;align-items:center;gap:5px;flex-shrink:0}
+  .ctx-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:3px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;cursor:default}
+  /* topbar pill buttons */
+  .tb-btn{display:inline-flex;align-items:center;gap:4px;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;border:none;transition:all .15s;white-space:nowrap;font-family:inherit}
+  .tb-btn-primary{background:var(--accent);color:#fff}
+  .tb-btn-primary:hover{background:#6a58e0}
+  .tb-btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+  .tb-btn-ghost:hover{color:var(--text);border-color:rgba(255,255,255,.2)}
+  .tb-btn-ghost.active{background:rgba(249,226,175,.12);border-color:rgba(249,226,175,.35);color:var(--warn)}
+  .tb-btn .ms{font-size:14px}
   button{background:var(--accent);color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:500;transition:opacity .15s;white-space:nowrap}
   button:hover{opacity:.85}
   button.secondary{background:var(--surface);border:1px solid var(--border);color:var(--text)}
@@ -35,9 +44,11 @@
   #chain-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 10px;pointer-events:none;opacity:0;transition:opacity .3s}
   #chain-hint.show{opacity:1}
   #sidebar{width:310px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
-  #sidebar-tabs{display:flex;border-bottom:1px solid var(--border);overflow-x:auto}
-  .stab{flex:1;min-width:44px;padding:7px 4px;text-align:center;cursor:pointer;font-size:11px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;transition:all .15s}
-  .stab.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(124,106,247,.08)}
+  #sidebar-tabs{display:flex;border-bottom:1px solid var(--border);overflow:hidden}
+  .stab{flex:1;display:flex;align-items:center;justify-content:center;padding:9px 0 8px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:color .15s,border-color .15s;position:relative}
+  .stab:hover{color:var(--text)}
+  .stab .ms{font-size:16px;line-height:1}
+  .stab.active{color:var(--text);border-bottom-color:var(--accent)}
   #sidebar-body{flex:1;overflow-y:auto;padding:10px}
   .detail-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
   .agent-icon{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
@@ -50,7 +61,7 @@
   .badge.error{background:rgba(243,139,168,.2);color:var(--err)}
   .badge.cancelled{background:rgba(249,226,175,.2);color:var(--warn)}
   .section-label{font-size:10px;font-weight:600;text-transform:uppercase;color:var(--muted);margin:8px 0 3px;letter-spacing:.05em}
-  .output-box{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-family:'Cascadia Code','Fira Code',monospace;font-size:10px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto;color:var(--text)}
+  .output-box{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-family:'JetBrains Mono','Cascadia Code','Fira Code',monospace;font-size:10px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto;color:var(--text)}
   .output-box.stream{color:var(--running)}
   .action-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
   .powers-list{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}
@@ -84,7 +95,7 @@
   ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
   @keyframes spin{to{transform:rotate(360deg)}}
   .spinner{width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--running);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
-  #chain-mode-btn.active{background:rgba(249,226,175,.2);border:1px solid var(--warn);color:var(--warn)}
+  #chain-mode-btn.active{background:rgba(249,226,175,.12);border-color:rgba(249,226,175,.35);color:var(--warn)}
   .ms{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;font-size:18px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;vertical-align:middle}
   .ms.sm{font-size:14px}
   .node-icon{font-family:'Material Symbols Rounded';font-variation-settings:'FILL' 1,'wght' 300,'GRAD' 0,'opsz' 20}
@@ -105,7 +116,7 @@
   #output-modal-inner{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:min(90vw,860px);max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
   #output-modal-header{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}
   #output-modal-title{font-weight:600;font-size:13px;flex:1}
-  #output-modal-body{flex:1;overflow-y:auto;padding:14px;font-family:'Cascadia Code','Fira Code',monospace;font-size:11px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+  #output-modal-body{flex:1;overflow-y:auto;padding:14px;font-family:'JetBrains Mono','Cascadia Code','Fira Code',monospace;font-size:11px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:var(--text)}
   #output-modal-actions{display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
 
   /* ── Memory cards ── */
@@ -137,30 +148,194 @@
   .timeline-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin:1px;vertical-align:middle}
   #timeline-wrap{display:flex;flex-wrap:wrap;gap:2px;padding:6px 0}
 
-  /* ── Conversation thread ── */
-  .conv-thread{margin-top:10px;border-top:1px solid var(--border);padding-top:8px}
-  .conv-message{margin-bottom:8px}
-  .conv-role{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;display:flex;align-items:center;gap:4px}
-  .conv-role.user{color:var(--accent)}
-  .conv-role.assistant{color:var(--accent2)}
-  .conv-bubble{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:10px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow-y:auto}
-  .conv-bubble.user{border-color:rgba(124,106,247,.3)}
-  .conv-bubble.assistant{border-color:rgba(94,234,212,.3)}
+  /* ── Conversation thread (legacy — keep for compat) ── */
   .conv-turns{font-size:10px;color:var(--muted);margin-bottom:6px}
-  .conv-input-wrap{display:flex;gap:5px;margin-top:8px;align-items:flex-end}
-  .conv-input-wrap textarea{min-height:44px;resize:none;font-size:11px}
-  .conv-send-btn{flex-shrink:0;padding:6px 8px;align-self:flex-end}
+
+  /* ── Tab header (History / Memory / Usage / Log) ── */
+  .tab-header{display:flex;align-items:center;gap:6px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+  .tab-header-title{font-size:11px;font-weight:700;display:flex;align-items:center;gap:5px;flex:1}
+  .tab-count-pill{font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1px 7px;color:var(--muted)}
+
+  /* ── Feedback toast ── */
+  .create-feedback-ok{background:rgba(166,227,161,.1);border:1px solid rgba(166,227,161,.25);color:var(--ok);border-radius:7px;padding:8px 10px;font-size:11px;display:flex;align-items:center;gap:5px}
+
+  /* ── Power toggle chips (Create tab) ── */
+  .power-chips{display:flex;flex-wrap:wrap;gap:5px}
+  .power-toggle{background:var(--bg);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;font-family:inherit;display:inline-flex;align-items:center;gap:4px}
+  .power-toggle:hover{border-color:var(--accent2);color:var(--text)}
+  .power-toggle.active{background:rgba(94,234,212,.12);border-color:var(--accent2);color:var(--accent2)}
+
+  /* ── History cards ── */
+  .hcard{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:border-color .15s}
+  .hcard:hover{border-color:var(--accent)}
+  .hcard-top{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+  .hcard-icon{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .hcard-name{font-weight:600;font-size:11px;flex:1}
+  .hcard-time{font-size:10px;color:var(--muted)}
+  .hcard-prompt{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hcard-output{display:none;margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.6;white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 9px;max-height:200px;overflow-y:auto}
+  .hcard.expanded .hcard-output{display:block}
+  .hcard-meta{display:flex;align-items:center;gap:6px;margin-top:5px}
+  .hcard-dur{font-size:9px;color:var(--muted);display:flex;align-items:center;gap:2px}
+
+  /* ── Memory cards (updated) ── */
+  .mem-group-header{display:flex;align-items:center;gap:6px;margin-bottom:7px;margin-top:14px}
+  .mem-group-header:first-child{margin-top:0}
+  .mem-group-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;flex:1}
+  .mem-count-pill{font-size:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1px 6px;color:var(--muted)}
+  .mem-card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:border-color .15s}
+  .mem-card:hover{border-color:var(--accent)}
+  .mem-card-top{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
+  .mem-card-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .mem-card-name{font-weight:600;font-size:11px;flex:1;line-height:1.4}
+  .mem-card-desc{font-size:10px;color:var(--muted);line-height:1.5}
+  .mem-card-body{display:none;margin-top:8px;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;max-height:220px;overflow-y:auto}
+  .mem-card.expanded .mem-card-body{display:block}
+
+  /* ── Usage dashboard (updated) ── */
+  .usage-stats-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+  .usage-stat-card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:14px 10px;text-align:center}
+  .usage-stat-card .us-val{font-size:26px;font-weight:700;color:var(--accent);line-height:1}
+  .usage-stat-card .us-label{font-size:9px;color:var(--muted);margin-top:5px;text-transform:uppercase;letter-spacing:.06em}
+  .ubar-row{margin-bottom:9px}
+  .ubar-top{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+  .ubar-icon{width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ubar-name{font-size:10px;flex:1;color:var(--text)}
+  .ubar-count{font-size:10px;font-weight:600;color:var(--muted)}
+  .ubar-track{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-left:26px}
+  .ubar-fill{height:100%;border-radius:2px;transition:width .5s}
+  .ubar-meta{font-size:9px;color:var(--muted);margin-top:2px;margin-left:26px}
+  #timeline-wrap{display:flex;flex-wrap:wrap;gap:3px;padding:4px 0 8px}
+  .timeline-dot{display:inline-block;width:9px;height:9px;border-radius:50%;cursor:default;transition:transform .1s}
+  .timeline-dot:hover{transform:scale(1.4)}
+  .timeline-legend{display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)}
+  .tl-dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+  /* ── Log (updated) ── */
+  #log-area{font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.8}
+  .log-line{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.025);display:flex;gap:8px}
+  .log-time{color:var(--muted);flex-shrink:0}
+  .log-msg{word-break:break-word}
+  .log-line.info .log-msg{color:var(--text)}
+  .log-line.warn .log-msg{color:var(--warn)}
+  .log-line.error .log-msg{color:var(--err)}
+
+  /* ── Model chips ── */
+  .model-chips{display:flex;gap:5px;flex-wrap:wrap}
+  .model-chip{background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;font-family:inherit}
+  .model-chip:hover{border-color:var(--accent);color:var(--text)}
+  .model-chip.active{background:rgba(124,106,247,.15);border-color:var(--accent);color:var(--accent)}
+
+  /* ── Agent picker (inline expandable) ── */
+  .agent-picker{border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:2px}
+  .ap-header{display:flex;align-items:center;gap:8px;padding:9px 10px;cursor:pointer;transition:background .15s;user-select:none}
+  .ap-header:hover{background:rgba(255,255,255,.03)}
+  .ap-header-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ap-header-info{flex:1;min-width:0}
+  .ap-header-name{font-size:12px;font-weight:600;line-height:1.3}
+  .ap-header-sub{font-size:10px;color:var(--muted)}
+  .ap-chevron{color:var(--muted);font-size:18px;transition:transform .2s;flex-shrink:0}
+  .ap-chevron.open{transform:rotate(180deg)}
+  .ap-body{border-top:1px solid var(--border)}
+  .ap-search-wrap{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--border)}
+  .ap-search{flex:1;background:none;border:none;outline:none;color:var(--text);font-size:11px;font-family:inherit}
+  .ap-search::placeholder{color:var(--muted)}
+  .ap-list{max-height:260px;overflow-y:auto}
+  .ap-group-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:8px 10px 4px}
+  .ap-item{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;transition:background .15s}
+  .ap-item:hover{background:rgba(255,255,255,.04)}
+  .ap-item.active{background:rgba(124,106,247,.1)}
+  .ap-item-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ap-item-info{flex:1;min-width:0}
+  .ap-item-name{font-size:11px;font-weight:600;line-height:1.3}
+  .ap-item-desc{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ap-check{color:var(--accent);flex-shrink:0;font-size:16px}
+
+  /* ── Run button loading state ── */
+  #run-btn.loading{opacity:.7;pointer-events:none}
+  #run-btn.loading .run-btn-icon{display:none}
+  #run-btn .run-btn-spinner{display:none}
+  #run-btn.loading .run-btn-spinner{display:inline-block}
+
+  /* ── Section labels upgrade ── */
+  .section-label{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted);margin:10px 0 4px;letter-spacing:.08em}
+  .run-section label{display:block;margin-bottom:5px;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+
+  /* ── Detail hero header ── */
+  .detail-hero{padding:12px 0 10px;border-bottom:1px solid var(--border);margin-bottom:10px}
+  .detail-hero-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .detail-hero-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .detail-hero-name{font-size:13px;font-weight:700;line-height:1.2;margin-bottom:2px}
+  .detail-hero-type{font-size:10px;color:var(--muted);text-transform:capitalize;letter-spacing:.02em}
+
+  /* ── Status pill ── */
+  .status-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600;flex-shrink:0}
+  .status-pill::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+  .status-pill.running{background:rgba(137,180,250,.15);color:var(--running);animation:pill-pulse 1.6s ease-in-out infinite}
+  .status-pill.done{background:rgba(166,227,161,.15);color:var(--ok)}
+  .status-pill.error{background:rgba(243,139,168,.15);color:var(--err)}
+  .status-pill.idle{background:rgba(30,32,48,.8);color:var(--muted)}
+  .status-pill.cancelled{background:rgba(249,226,175,.12);color:var(--warn)}
+  @keyframes pill-pulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+  /* ── Detail chips row ── */
+  .detail-chips{display:flex;flex-wrap:wrap;gap:4px}
+  .detail-chip{background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:2px 7px;font-size:10px;color:var(--muted);display:inline-flex;align-items:center;gap:3px}
+
+  /* ── Detail sections ── */
+  .detail-section{margin-top:12px}
+  .detail-section-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:flex;align-items:center;gap:4px;margin-bottom:5px}
+  .detail-input-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.6;color:var(--muted);max-height:90px;overflow-y:auto;word-break:break-word}
+
+  /* ── Output area ── */
+  .output-area{margin-top:12px}
+  .output-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+  .output-header-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:flex;align-items:center;gap:4px}
+  .output-text{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:'JetBrains Mono','Cascadia Code',monospace;font-size:10.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word;max-height:320px;overflow-y:auto;color:var(--text)}
+  .output-text.stream{color:var(--running);border-color:rgba(137,180,250,.25)}
+  .output-text.stream::after{content:'▋';animation:blink .85s step-end infinite;color:var(--running);margin-left:1px}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+  .output-actions{display:flex;gap:4px;margin-top:7px}
+  .output-actions button{flex:1;padding:5px 3px;font-size:10px}
+
+  /* ── Cancel button ── */
+  .cancel-btn{width:100%;margin-top:10px;background:rgba(243,139,168,.1);border:1px solid rgba(243,139,168,.25);color:var(--err);border-radius:7px;padding:7px;cursor:pointer;font-size:11px;font-weight:600;transition:all .15s;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px}
+  .cancel-btn:hover{background:rgba(243,139,168,.2)}
+
+  /* ── Conversation thread (detail) ── */
+  .conv-thread{margin-top:14px;border-top:1px solid var(--border);padding-top:10px}
+  .conv-thread-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:flex;align-items:center;gap:5px;margin-bottom:10px}
+  .conv-msg{display:flex;gap:7px;margin-bottom:9px;align-items:flex-start}
+  .conv-msg-avatar{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .conv-msg-avatar.user{background:rgba(124,106,247,.18);color:var(--accent)}
+  .conv-msg-avatar.assistant{background:rgba(94,234,212,.15);color:var(--accent2)}
+  .conv-msg-body{flex:1;min-width:0}
+  .conv-msg-meta{font-size:9px;color:var(--muted);margin-bottom:3px}
+  .conv-msg-text{background:var(--surface);border:1px solid var(--border);border-radius:0 7px 7px 7px;padding:7px 10px;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow-y:auto}
+  .conv-msg.user .conv-msg-text{border-color:rgba(124,106,247,.22);border-radius:7px 0 7px 7px}
+  .conv-msg.assistant .conv-msg-text{border-color:rgba(94,234,212,.18)}
+  .conv-compose{position:relative;margin-top:8px}
+  .conv-compose textarea{width:100%;min-height:60px;resize:none;font-size:11px;border-radius:8px;padding:8px 38px 8px 10px;box-sizing:border-box}
+  .conv-compose-send{position:absolute;bottom:6px;right:6px;width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:6px;background:var(--accent);border:none}
+  .conv-compose-send:hover{opacity:.85}
+  .conv-hint{font-size:9px;color:var(--muted);text-align:right;margin-top:3px}
+  .thinking-row{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:10px;color:var(--running)}
+  .thinking-dots::after{content:'';animation:tdots 1.4s steps(3,end) infinite}
+  @keyframes tdots{0%{content:''}33%{content:'.'}66%{content:'..'}100%{content:'...'}}
 </style>
 </head>
 <body>
 
 <div id="topbar">
-  <h1><span class="ms sm" style="color:var(--accent)">hub</span> Claude Agents</h1>
-  <span class="ctx-badge" id="ctx-badge">No file open</span>
-  <button onclick="switchTab('run')"><span class="ms sm">play_arrow</span> Run</button>
-  <button onclick="switchTab('create')"><span class="ms sm">add</span> New</button>
-  <button id="chain-mode-btn" class="secondary sm" onclick="toggleChainMode()" title="Chain mode: click two nodes to pipe output"><span class="ms sm">cable</span> Chain</button>
-  <button class="danger secondary sm" onclick="clearGraph()"><span class="ms sm">delete_sweep</span></button>
+  <div id="topbar-left">
+    <span class="ctx-badge" id="ctx-badge"><span class="ms sm" style="font-size:12px">insert_drive_file</span> No file open</span>
+  </div>
+  <div id="topbar-actions">
+    <button class="tb-btn tb-btn-primary" onclick="switchTab('run')"><span class="ms">play_arrow</span> Run</button>
+    <button class="tb-btn tb-btn-ghost" onclick="switchTab('create')"><span class="ms">add</span> New</button>
+    <button id="chain-mode-btn" class="tb-btn tb-btn-ghost" onclick="toggleChainMode()" title="Chain mode: click two nodes to pipe output"><span class="ms">cable</span> Chain</button>
+    <button class="tb-btn tb-btn-ghost" onclick="clearGraph()" title="Clear canvas" style="padding:4px 8px"><span class="ms">delete_sweep</span></button>
+  </div>
 </div>
 
 <!-- Output expand modal -->
@@ -219,44 +394,48 @@
       <div id="panel-run" style="display:none">
         <div class="run-section">
           <label>Agent</label>
-          <select id="run-type" onchange="onRunTypeChange()">
-            <option value="planner">🗺 Planner — full multi-agent plan</option>
-            <option value="code-review">🔍 Code Reviewer</option>
-            <option value="researcher">🌐 Researcher (web)</option>
-            <option value="coder">💻 Coder (files + terminal)</option>
-            <option value="summarizer">📋 Summarizer</option>
-            <option value="git-commit">📝 Git Commit Writer</option>
-            <option value="pr-description">🔀 PR Description Writer</option>
-            <option value="test-writer">🧪 Test Writer</option>
-            <option value="bug-finder">🐛 Bug Finder</option>
-            <option value="docs-writer">📖 Docs Writer</option>
-            <option value="refactor">♻ Refactor Agent</option>
-            <option value="__custom__" id="custom-opt" style="display:none">✦ Custom Agent…</option>
-          </select>
+          <div class="agent-picker" id="run-agent-picker">
+            <div class="ap-header" onclick="toggleAgentPicker('run')">
+              <div class="ap-header-icon" id="run-ap-icon"></div>
+              <div class="ap-header-info">
+                <div class="ap-header-name" id="run-ap-name">Code Reviewer</div>
+                <div class="ap-header-sub" id="run-ap-sub">Analysis · files</div>
+              </div>
+              <span class="ms ap-chevron" id="run-ap-chevron">expand_more</span>
+            </div>
+            <div class="ap-body" id="run-ap-body" style="display:none">
+              <div class="ap-search-wrap">
+                <span class="ms sm" style="color:var(--muted)">search</span>
+                <input class="ap-search" id="run-ap-search" placeholder="Search agents…" oninput="filterAgentPicker('run',this.value)">
+              </div>
+              <div class="ap-list" id="run-ap-list"></div>
+            </div>
+          </div>
         </div>
         <div class="run-section" id="custom-agent-section" style="display:none">
-          <label>Custom agent</label>
+          <label>Custom Agent</label>
           <select id="run-custom-select"></select>
         </div>
         <div class="run-section">
           <label>Model</label>
-          <select id="run-model">
-            <option value="">Default</option>
-            <option value="claude-opus-4-6">Opus 4.6 — most capable</option>
-            <option value="claude-sonnet-4-6">Sonnet 4.6 — balanced</option>
-            <option value="claude-haiku-4-5-20251001">Haiku 4.5 — fastest</option>
-          </select>
+          <div class="model-chips">
+            <button type="button" class="model-chip active" data-value="claude-sonnet-4-6" onclick="selectModelChip(this)">Sonnet 4.6</button>
+            <button type="button" class="model-chip" data-value="claude-opus-4-6" onclick="selectModelChip(this)">Opus 4.6</button>
+            <button type="button" class="model-chip" data-value="claude-haiku-4-5-20251001" onclick="selectModelChip(this)">Haiku 4.5 — fastest</button>
+          </div>
         </div>
         <div class="run-section">
           <label>Prompt</label>
-          <textarea id="run-input" placeholder="Describe the task…"></textarea>
+          <textarea id="run-input" placeholder="Describe the task…" oninput="autoResize(this)"></textarea>
         </div>
         <div class="toggle-row">
-          <span>📎 Include current file context</span>
-          <input type="checkbox" id="run-use-context" checked>
+          <label class="checkbox-row" style="margin:0"><input type="checkbox" id="run-use-context" checked> <span class="ms sm" style="color:var(--accent2)">attach_file</span> Include current file context</label>
         </div>
         <div id="run-ctx-info" style="font-size:10px;color:var(--accent2);margin-top:4px"></div>
-        <button style="width:100%;margin-top:10px" onclick="submitRun()">▶ Run</button>
+        <button id="run-btn" style="width:100%;margin-top:10px;padding:7px" onclick="submitRun()">
+          <span class="run-btn-icon"><span class="ms sm">play_arrow</span> Run Agent</span>
+          <span class="run-btn-spinner spinner"></span>
+        </button>
       </div>
 
       <!-- CREATE -->
@@ -266,69 +445,83 @@
           <input type="text" id="create-name" placeholder="e.g. Documentation Writer">
         </div>
         <div class="run-section">
-          <label>System prompt</label>
-          <textarea id="create-prompt" style="min-height:110px" placeholder="You are an expert…"></textarea>
+          <label>System Prompt</label>
+          <textarea id="create-prompt" oninput="autoResize(this)" placeholder="You are an expert at…"></textarea>
         </div>
         <div class="run-section">
           <label>Model</label>
-          <select id="create-model">
-            <option value="">Default</option>
-            <option value="claude-opus-4-6">Opus 4.6</option>
-            <option value="claude-sonnet-4-6">Sonnet 4.6</option>
-            <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
-          </select>
+          <div class="model-chips" id="create-model-chips">
+            <button type="button" class="model-chip active" data-value="claude-sonnet-4-6" onclick="selectModelChip(this)">Sonnet 4.6</button>
+            <button type="button" class="model-chip" data-value="claude-opus-4-6" onclick="selectModelChip(this)">Opus 4.6</button>
+            <button type="button" class="model-chip" data-value="claude-haiku-4-5-20251001" onclick="selectModelChip(this)">Haiku 4.5</button>
+          </div>
         </div>
         <div class="run-section">
           <label>Superpowers</label>
-          <label class="checkbox-row"><input type="checkbox" value="files"> 📁 Files</label>
-          <label class="checkbox-row"><input type="checkbox" value="terminal"> 💻 Terminal</label>
-          <label class="checkbox-row"><input type="checkbox" value="web"> 🌐 Web</label>
-          <label class="checkbox-row"><input type="checkbox" value="todos"> ✅ Todos</label>
+          <div class="power-chips">
+            <button type="button" class="power-toggle" data-value="files" onclick="togglePower(this)"><span class="ms sm">folder</span> Files</button>
+            <button type="button" class="power-toggle" data-value="terminal" onclick="togglePower(this)"><span class="ms sm">terminal</span> Terminal</button>
+            <button type="button" class="power-toggle" data-value="web" onclick="togglePower(this)"><span class="ms sm">language</span> Web</button>
+            <button type="button" class="power-toggle" data-value="todos" onclick="togglePower(this)"><span class="ms sm">check_circle</span> Todos</button>
+          </div>
         </div>
-        <button style="width:100%" onclick="submitCreate()">✦ Create Agent</button>
-        <div id="create-feedback" style="margin-top:6px;color:var(--ok);font-size:11px;display:none"></div>
+        <button style="width:100%;margin-top:4px;padding:7px" onclick="submitCreate()">
+          <span class="ms sm">add_circle</span> Create Agent
+        </button>
+        <div id="create-feedback" style="display:none;margin-top:8px"></div>
       </div>
 
       <!-- SCHEDULE -->
       <div id="panel-schedule" style="display:none">
         <div class="run-section">
           <label>Agent</label>
-          <select id="sched-type">
-            <option value="summarizer">📋 Summarizer</option>
-            <option value="bug-finder">🐛 Bug Finder</option>
-            <option value="code-review">🔍 Code Reviewer</option>
-            <option value="git-commit">📝 Git Commit Writer</option>
-          </select>
+          <div class="agent-picker" id="sched-agent-picker">
+            <div class="ap-header" onclick="toggleAgentPicker('sched')">
+              <div class="ap-header-icon" id="sched-ap-icon"></div>
+              <div class="ap-header-info">
+                <div class="ap-header-name" id="sched-ap-name">Summarizer</div>
+                <div class="ap-header-sub" id="sched-ap-sub">Documentation</div>
+              </div>
+              <span class="ms ap-chevron" id="sched-ap-chevron">expand_more</span>
+            </div>
+            <div class="ap-body" id="sched-ap-body" style="display:none">
+              <div class="ap-list" id="sched-ap-list"></div>
+            </div>
+          </div>
         </div>
         <div class="run-section">
           <label>Interval</label>
-          <select id="sched-interval">
-            <option value="30m">Every 30 minutes</option>
-            <option value="1h">Every hour</option>
-            <option value="@daily">Daily</option>
-          </select>
+          <div class="model-chips" id="sched-interval-chips">
+            <button type="button" class="model-chip" data-value="30m" onclick="selectModelChip(this)">30 min</button>
+            <button type="button" class="model-chip active" data-value="1h" onclick="selectModelChip(this)">1 hour</button>
+            <button type="button" class="model-chip" data-value="@daily" onclick="selectModelChip(this)">Daily</button>
+          </div>
         </div>
         <div class="run-section">
           <label>Prompt</label>
-          <textarea id="sched-input" placeholder="e.g. Summarise changes since last run"></textarea>
+          <textarea id="sched-input" oninput="autoResize(this)" placeholder="e.g. Summarise changes since last run"></textarea>
         </div>
-        <button style="width:100%" onclick="submitSchedule()">⏰ Schedule</button>
-        <div id="sched-feedback" style="margin-top:6px;color:var(--ok);font-size:11px;display:none"></div>
+        <button style="width:100%;margin-top:4px;padding:7px" onclick="submitSchedule()">
+          <span class="ms sm">schedule</span> Schedule Agent
+        </button>
+        <div id="sched-feedback" style="display:none;margin-top:8px"></div>
       </div>
 
       <!-- HISTORY -->
       <div id="panel-history" style="display:none">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span style="font-size:11px;color:var(--muted)" id="hist-count">No history yet</span>
-          <button class="sm secondary" onclick="vscode.postMessage({type:'openHistory'})">↺ Refresh</button>
+        <div class="tab-header">
+          <span class="tab-header-title"><span class="ms sm">history</span> History</span>
+          <span class="tab-count-pill" id="hist-count"></span>
+          <button class="sm secondary" onclick="vscode.postMessage({type:'openHistory'})"><span class="ms sm">refresh</span></button>
         </div>
         <div id="history-list"></div>
       </div>
 
       <!-- MEMORY -->
       <div id="panel-memory" style="display:none">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span style="font-size:11px;color:var(--muted)" id="mem-count">Loading…</span>
+        <div class="tab-header">
+          <span class="tab-header-title"><span class="ms sm">psychology</span> Memory</span>
+          <span class="tab-count-pill" id="mem-count"></span>
           <button class="sm secondary" onclick="vscode.postMessage({type:'requestMemory'})"><span class="ms sm">refresh</span></button>
         </div>
         <div id="memory-list"></div>
@@ -336,26 +529,30 @@
 
       <!-- USAGE -->
       <div id="panel-usage" style="display:none">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <span style="font-size:11px;font-weight:600">Usage Dashboard</span>
+        <div class="tab-header">
+          <span class="tab-header-title"><span class="ms sm">insights</span> Usage</span>
           <button class="sm secondary" onclick="vscode.postMessage({type:'requestUsage'})"><span class="ms sm">refresh</span></button>
         </div>
-        <div class="usage-stat-grid">
-          <div class="usage-stat"><div class="us-val" id="us-total">—</div><div class="us-label">Total Runs</div></div>
-          <div class="usage-stat"><div class="us-val" id="us-rate">—</div><div class="us-label">Success Rate</div></div>
+        <div class="usage-stats-row">
+          <div class="usage-stat-card"><div class="us-val" id="us-total">—</div><div class="us-label">Total Runs</div></div>
+          <div class="usage-stat-card"><div class="us-val" id="us-rate">—</div><div class="us-label">Success Rate</div></div>
         </div>
-        <div class="section-label">Runs by Agent</div>
-        <div id="us-bars" style="margin-bottom:12px"></div>
-        <div class="section-label">Recent Timeline</div>
+        <div class="detail-section-title"><span class="ms sm" style="font-size:11px">bar_chart</span> By Agent</div>
+        <div id="us-bars" style="margin-bottom:14px"></div>
+        <div class="detail-section-title"><span class="ms sm" style="font-size:11px">timeline</span> Recent Runs</div>
         <div id="timeline-wrap"></div>
-        <div style="font-size:9px;color:var(--muted);margin-top:4px">
-          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:3px"></span>success
-          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--err);margin:0 3px 0 8px"></span>error
+        <div class="timeline-legend">
+          <span class="tl-dot" style="background:var(--ok)"></span>success
+          <span class="tl-dot" style="background:var(--err);margin-left:8px"></span>error
         </div>
       </div>
 
       <!-- LOG -->
       <div id="panel-log" style="display:none">
+        <div class="tab-header">
+          <span class="tab-header-title"><span class="ms sm">terminal</span> Log</span>
+          <button class="sm secondary" onclick="document.getElementById('log-area').innerHTML=''"><span class="ms sm">delete_sweep</span></button>
+        </div>
         <div id="log-area"></div>
       </div>
 
@@ -463,6 +660,23 @@ function tickPhysics() {
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   document.getElementById('empty-hint').style.display = nodes.size===0 ? 'flex' : 'none';
+
+  // ── Dot grid background (screen-space, stays fixed) ─────────────────────
+  const sp = 28;
+  ctx.fillStyle = 'rgba(255,255,255,0.028)';
+  for (let x = ((camX % sp) + sp) % sp; x < canvas.width; x += sp) {
+    for (let y = ((camY % sp) + sp) % sp; y < canvas.height; y += sp) {
+      ctx.beginPath(); ctx.arc(x, y, 1, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
+  // ── Radial glow from center ───────────────────────────────────────────
+  const grd = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, canvas.width * 0.55);
+  grd.addColorStop(0, 'rgba(124,106,247,0.07)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
   ctx.save();
   ctx.translate(camX, camY); ctx.scale(camScale, camScale);
 
@@ -497,10 +711,21 @@ function draw() {
     ctx.lineWidth=isSel||isChainSrc?2.5:1.5; ctx.stroke();
     if (isSel||isChainSrc) ctx.restore();
 
+    // ── Dual counter-rotating rings when running ─────────────────────────
     if (node.status==='running') {
-      const t=(Date.now()%1500)/1500;
-      ctx.beginPath(); ctx.arc(pos.x,pos.y,nodeRadius+6+t*12,0,Math.PI*2);
-      ctx.strokeStyle=`rgba(137,180,250,${.4*(1-t)})`; ctx.lineWidth=2; ctx.stroke();
+      const t = Date.now() / 1000;
+      const a1 = t * 2.2;
+      const a2 = -t * 1.7;
+      ctx.save(); ctx.lineCap = 'round';
+      // Outer ring (accent / purple) — clockwise arc
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, nodeRadius+9, a1, a1 + Math.PI*1.5);
+      ctx.strokeStyle = 'rgba(124,106,247,0.75)'; ctx.lineWidth = 2; ctx.stroke();
+      // Inner ring (accent2 / teal) — counter-clockwise arc
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, nodeRadius+5, a2, a2 + Math.PI*1.1);
+      ctx.strokeStyle = 'rgba(94,234,212,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.restore();
     }
 
     // Draw Material Symbol icon
@@ -509,13 +734,17 @@ function draw() {
     ctx.fillStyle=isSel ? '#fff' : (TYPE_COLOR[node.type] || '#cdd6f4');
     ctx.fillText(TYPE_ICONS[node.type]||'tune', pos.x, pos.y);
 
-    ctx.font='600 9px Segoe UI,system-ui'; ctx.fillStyle='#cdd6f4';
+    ctx.font="600 9px 'DM Sans',system-ui"; ctx.fillStyle='#cdd6f4';
     ctx.textBaseline='top';
     const lbl=node.name.length>14?node.name.slice(0,13)+'…':node.name;
     ctx.fillText(lbl, pos.x, pos.y+nodeRadius+3);
 
+    // Status dot — pulses when running
+    const dotPulse = node.status==='running' ? 0.55 + 0.45*Math.sin(Date.now()/280) : 1;
+    ctx.globalAlpha = dotPulse;
     ctx.beginPath(); ctx.arc(pos.x+nodeRadius-6,pos.y-nodeRadius+6,4,0,Math.PI*2);
     ctx.fillStyle=sc; ctx.fill();
+    ctx.globalAlpha = 1;
   }
   ctx.restore();
 }
@@ -588,75 +817,122 @@ function handleChainClick(id) {
 function selectNode(id) { selectedId=id; switchTab('detail'); renderDetail(); }
 
 function renderDetail() {
-  const detail=document.getElementById('agent-detail');
-  const noSel=document.getElementById('no-selection');
-  if (!selectedId||!nodes.has(selectedId)) {
-    detail.style.display='none'; noSel.style.display='flex'; return;
+  const detail = document.getElementById('agent-detail');
+  const noSel  = document.getElementById('no-selection');
+  if (!selectedId || !nodes.has(selectedId)) {
+    detail.style.display = 'none'; noSel.style.display = 'flex'; return;
   }
-  const node=nodes.get(selectedId);
-  noSel.style.display='none'; detail.style.display='block';
-  const dur=node.endTime&&node.startTime?((node.endTime-node.startTime)/1000).toFixed(1)+'s':node.startTime?'running…':'—';
+  const node = nodes.get(selectedId);
+  noSel.style.display = 'none'; detail.style.display = 'block';
 
-  const outputHtml = node.streamBuffer
-    ? `<div class="section-label">Streaming…</div><div class="output-box stream">${esc(node.streamBuffer)}</div>`
-    : node.output
-    ? `<div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
-         Output
-         <button class="sm secondary" onclick="openModal('${node.id}')" style="padding:1px 5px"><span class="ms sm">open_in_full</span> Expand</button>
-       </div>
-       <div class="output-box">${esc(node.output.slice(0,800))}${node.output.length>800?'\n\n[… expand to see full output]':''}</div>
-       <div class="action-row">
-         <button class="sm" onclick="copyOutput()"><span class="ms sm">content_copy</span> Copy</button>
-         <button class="sm secondary" onclick="applyDiff()"><span class="ms sm">difference</span> Diff</button>
-         <button class="sm secondary" onclick="insertInline()"><span class="ms sm">keyboard_return</span> Insert</button>
-         <button class="sm secondary" onclick="exportMd()"><span class="ms sm">download</span> MD</button>
-       </div>` : '';
+  const dur = node.endTime && node.startTime
+    ? ((node.endTime - node.startTime) / 1000).toFixed(1) + 's'
+    : node.startTime ? 'running…' : '—';
+  const typeColor = TYPE_COLOR[node.type] || 'var(--text)';
 
-  const errHtml = node.error
-    ? `<div class="section-label">Error</div><div class="output-box" style="color:var(--err)">${esc(node.error)}</div>` : '';
+  // ── Hero chips (duration + turns + powers) ─────────────────────────────
+  const powers = (node.powers || []).filter(p => p !== 'none');
+  const POWER_ICONS = { files:'folder', terminal:'terminal', web:'language', todos:'check_circle' };
+  const chips = [
+    `<span class="detail-chip"><span class="ms sm" style="font-size:11px">timer</span>${dur}</span>`,
+    node.turns > 0 ? `<span class="detail-chip"><span class="ms sm" style="font-size:11px">forum</span>${node.turns} turn${node.turns !== 1 ? 's' : ''}</span>` : '',
+    ...powers.map(p => `<span class="detail-chip"><span class="ms sm" style="font-size:11px">${POWER_ICONS[p] || 'bolt'}</span>${p}</span>`),
+  ].filter(Boolean).join('');
 
-  const pwrHtml = (node.powers||[]).filter(p=>p!=='none').length>0
-    ? `<div class="section-label">Superpowers</div><div class="powers-list">${node.powers.filter(p=>p!=='none').map(p=>`<span class="power-chip">${p}</span>`).join('')}</div>` : '';
+  // ── Output section ─────────────────────────────────────────────────────
+  let outputHtml = '';
+  if (node.streamBuffer) {
+    outputHtml = `
+      <div class="output-area">
+        <div class="output-header">
+          <span class="output-header-label"><span class="ms sm" style="font-size:11px">stream</span> Streaming</span>
+        </div>
+        <div class="output-text stream">${esc(node.streamBuffer)}</div>
+      </div>`;
+  } else if (node.output) {
+    const preview = node.output.slice(0, 900);
+    const truncated = node.output.length > 900;
+    outputHtml = `
+      <div class="output-area">
+        <div class="output-header">
+          <span class="output-header-label"><span class="ms sm" style="font-size:11px">article</span> Output</span>
+          <button class="sm secondary" onclick="openModal('${node.id}')" style="padding:2px 7px;font-size:10px"><span class="ms sm" style="font-size:12px">open_in_full</span> Expand</button>
+        </div>
+        <div class="output-text">${esc(preview)}${truncated ? '\n\n↗  expand for full output' : ''}</div>
+        <div class="output-actions">
+          <button class="sm" onclick="copyOutput()"><span class="ms sm">content_copy</span> Copy</button>
+          <button class="sm secondary" onclick="applyDiff()"><span class="ms sm">difference</span> Diff</button>
+          <button class="sm secondary" onclick="insertInline()"><span class="ms sm">keyboard_return</span> Insert</button>
+          <button class="sm secondary" onclick="exportMd()"><span class="ms sm">download</span> MD</button>
+        </div>
+      </div>`;
+  }
 
-  const cancelBtn = node.status==='running'
-    ? `<button class="danger sm" style="margin-top:8px;width:100%" onclick="vscode.postMessage({type:'cancelAgent',id:'${node.id}'})"><span class="ms sm">stop_circle</span> Cancel</button>` : '';
-
-  // Conversation thread — skip first user message (shown as Input) and first assistant reply (shown as Output)
-  const msgs = node.messages || [];
-  const threadMsgs = msgs.slice(2); // after initial exchange
-  const threadHtml = msgs.length > 0 ? `
-    <div class="conv-thread">
-      <div class="section-label" style="display:flex;align-items:center;gap:6px">
-        <span class="ms sm">forum</span> Conversation
-        ${node.turns > 0 ? `<span class="conv-turns">${node.turns} turn${node.turns!==1?'s':''}</span>` : ''}
-      </div>
-      ${threadMsgs.map(m=>`
-        <div class="conv-message">
-          <div class="conv-role ${m.role}">
-            <span class="ms sm">${m.role==='user'?'person':'smart_toy'}</span>
-            ${m.role}
-            <span style="color:var(--muted);font-weight:400">${new Date(m.timestamp).toLocaleTimeString()}</span>
-          </div>
-          <div class="conv-bubble ${m.role}">${esc(m.text.slice(0,400))}${m.text.length>400?'\n…':''}</div>
-        </div>`).join('')}
-      ${node.status!=='running' ? `
-        <div class="conv-input-wrap">
-          <textarea id="conv-input-${node.id}" placeholder="Follow up… e.g. 'now fix that bug'" onkeydown="handleConvKey(event,'${node.id}')"></textarea>
-          <button class="conv-send-btn" onclick="sendContinue('${node.id}')">
-            <span class="ms sm">send</span>
-          </button>
-        </div>` : '<div style="font-size:10px;color:var(--running);margin-top:6px"><span class="ms sm">hourglass_top</span> Responding…</div>'}
+  // ── Error ──────────────────────────────────────────────────────────────
+  const errHtml = node.error ? `
+    <div class="detail-section">
+      <div class="detail-section-title"><span class="ms sm" style="font-size:11px;color:var(--err)">error_outline</span> Error</div>
+      <div class="output-text" style="color:var(--err);border-color:rgba(243,139,168,.22)">${esc(node.error)}</div>
     </div>` : '';
 
-  detail.innerHTML=`
-    <div class="detail-header">
-      <div class="agent-icon" style="background:${STATUS_BG[node.status]};border:1.5px solid ${STATUS_COLOR[node.status]}"><span class="ms" style="color:${TYPE_COLOR[node.type]||'var(--text)'};font-size:16px">${TYPE_ICONS[node.type]||'tune'}</span></div>
-      <div><div class="detail-title">${esc(node.name)}</div><div class="detail-subtitle">${node.type} · ${dur}</div></div>
-      <span class="badge ${node.status}">${node.status}</span>
+  // ── Cancel ─────────────────────────────────────────────────────────────
+  const cancelHtml = node.status === 'running' ? `
+    <button class="cancel-btn" onclick="vscode.postMessage({type:'cancelAgent',id:'${node.id}'})">
+      <span class="ms sm">stop_circle</span> Stop Agent
+    </button>` : '';
+
+  // ── Conversation thread ─────────────────────────────────────────────────
+  const msgs = node.messages || [];
+  const threadMsgs = msgs.slice(2); // skip initial prompt + first reply (shown above)
+  const threadHtml = msgs.length > 0 ? `
+    <div class="conv-thread">
+      <div class="conv-thread-title">
+        <span class="ms sm">forum</span> Conversation
+        ${node.turns > 0 ? `<span style="color:var(--accent);font-size:10px">${node.turns} turn${node.turns !== 1 ? 's' : ''}</span>` : ''}
+      </div>
+      ${threadMsgs.map(m => `
+        <div class="conv-msg ${m.role}">
+          <div class="conv-msg-avatar ${m.role}">
+            <span class="ms sm" style="font-size:13px">${m.role === 'user' ? 'person' : 'smart_toy'}</span>
+          </div>
+          <div class="conv-msg-body">
+            <div class="conv-msg-meta">${m.role === 'user' ? 'You' : 'Claude'} · ${new Date(m.timestamp).toLocaleTimeString()}</div>
+            <div class="conv-msg-text">${esc(m.text.slice(0, 500))}${m.text.length > 500 ? '\n…' : ''}</div>
+          </div>
+        </div>`).join('')}
+      ${node.status === 'running'
+        ? `<div class="thinking-row"><span class="spinner"></span> Responding<span class="thinking-dots"></span></div>`
+        : `<div class="conv-compose">
+             <textarea id="conv-input-${node.id}" placeholder="Follow up…" onkeydown="handleConvKey(event,'${node.id}')" oninput="autoResize(this)"></textarea>
+             <button class="conv-compose-send" onclick="sendContinue('${node.id}')"><span class="ms sm">send</span></button>
+           </div>
+           <div class="conv-hint">Ctrl+Enter to send</div>`}
+    </div>` : '';
+
+  detail.innerHTML = `
+    <div class="detail-hero">
+      <div class="detail-hero-top">
+        <div class="detail-hero-icon" style="background:${STATUS_BG[node.status]};border:1.5px solid ${STATUS_COLOR[node.status]}">
+          <span class="ms" style="color:${typeColor};font-size:20px">${TYPE_ICONS[node.type] || 'tune'}</span>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="detail-hero-name">${esc(node.name)}</div>
+          <div class="detail-hero-type">${node.type.replace(/-/g, ' ')}</div>
+        </div>
+        <span class="status-pill ${node.status}">${node.status}</span>
+      </div>
+      <div class="detail-chips">${chips}</div>
     </div>
-    ${pwrHtml}
-    ${node.input?`<div class="section-label">Input</div><div class="output-box">${esc(node.input.slice(0,300))}${node.input.length>300?'…':''}</div>`:''}
-    ${outputHtml}${errHtml}${cancelBtn}${threadHtml}`;
+    ${node.input ? `
+      <div class="detail-section">
+        <div class="detail-section-title"><span class="ms sm" style="font-size:11px">chat_bubble</span> Input</div>
+        <div class="detail-input-box">${esc(node.input.slice(0, 400))}${node.input.length > 400 ? '…' : ''}</div>
+      </div>` : ''}
+    ${outputHtml}
+    ${errHtml}
+    ${cancelHtml}
+    ${threadHtml}
+  `;
 }
 
 function copyOutput() {
@@ -768,89 +1044,272 @@ function modalDiff()  { if(modalNodeId) vscode.postMessage({type:'applyDiff',nod
 function modalInsert(){ if(modalNodeId) vscode.postMessage({type:'insertInline',nodeId:modalNodeId}); }
 function modalExport(){ if(modalNodeId) vscode.postMessage({type:'exportMarkdown',nodeId:modalNodeId}); }
 
-// ── Run ────────────────────────────────────────────────────────────────────
-function onRunTypeChange() {
-  const v=document.getElementById('run-type').value;
-  document.getElementById('custom-agent-section').style.display=v==='__custom__'?'block':'none';
+// ── Auto-resize textarea ───────────────────────────────────────────────────
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 300) + 'px';
 }
 
-function submitRun() {
-  const typeEl=document.getElementById('run-type');
-  const input=document.getElementById('run-input').value.trim();
-  const model=document.getElementById('run-model').value||undefined;
-  const useContext=document.getElementById('run-use-context').checked;
-  if(!input){alert('Please enter a prompt.');return;}
-  if(typeEl.value==='__custom__') {
-    const agentId=document.getElementById('run-custom-select').value;
-    vscode.postMessage({type:'runCustom',agentId,input,model,useContext});
-  } else {
-    vscode.postMessage({type:'runAgent',agentType:typeEl.value,input,model,useContext});
-  }
-  document.getElementById('run-input').value='';
+// ── Model chip selector ────────────────────────────────────────────────────
+function selectModelChip(el) {
+  el.closest('.model-chips').querySelectorAll('.model-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
 }
+function getSelectedModel() {
+  const active = document.querySelector('#panel-run .model-chips .model-chip.active');
+  return active?.dataset.value || undefined;
+}
+
+// ── Agent picker ───────────────────────────────────────────────────────────
+const AGENT_GROUPS = [
+  { label: 'Analysis',      agents: ['code-review','bug-finder'] },
+  { label: 'Planning',      agents: ['planner'] },
+  { label: 'Development',   agents: ['coder','refactor'] },
+  { label: 'Documentation', agents: ['docs-writer','summarizer'] },
+  { label: 'Git',           agents: ['git-commit','pr-description'] },
+  { label: 'Testing',       agents: ['test-writer'] },
+  { label: 'Research',      agents: ['researcher'] },
+];
+const SCHED_AGENTS = ['summarizer','bug-finder','code-review','git-commit'];
+const AGENT_LABELS = {
+  'planner':'Planner','code-review':'Code Reviewer','researcher':'Researcher',
+  'coder':'Coder','summarizer':'Summarizer','git-commit':'Commit Drafter',
+  'pr-description':'PR Description','test-writer':'Test Generator',
+  'bug-finder':'Bug Finder','docs-writer':'Doc Writer','refactor':'Refactor',
+};
+const AGENT_DESCS = {
+  'code-review':'Audits code for bugs, security & best practices',
+  'bug-finder':'Finds and explains bugs in your code',
+  'planner':'Breaks tasks into a multi-agent execution plan',
+  'coder':'Writes and edits code with file access',
+  'refactor':'Improves code structure without changing behavior',
+  'docs-writer':'Generates JSDoc, README and inline comments',
+  'summarizer':'Condenses output into clear summaries',
+  'git-commit':'Writes conventional commit messages from diffs',
+  'pr-description':'Drafts pull request descriptions',
+  'test-writer':'Scaffolds unit & integration test suites',
+  'researcher':'Searches the web and synthesises findings',
+};
+const AGENT_SUBS = {
+  'code-review':'Analysis · files','bug-finder':'Analysis · files',
+  'planner':'Planning · all tools','coder':'Development · files + terminal',
+  'refactor':'Development · files','docs-writer':'Documentation · files',
+  'summarizer':'Documentation','git-commit':'Git · terminal',
+  'pr-description':'Git','test-writer':'Testing · files','researcher':'Research · web',
+};
+
+let selectedRunAgent  = 'code-review';
+let selectedSchedAgent = 'summarizer';
+
+function buildAgentPicker(prefix) {
+  const listEl = document.getElementById(prefix + '-ap-list');
+  if (!listEl) return;
+  const groups = prefix === 'sched'
+    ? [{ label: 'Agents', agents: SCHED_AGENTS }]
+    : AGENT_GROUPS;
+  listEl.innerHTML = groups.map(g => `
+    <div class="ap-group" data-group="${g.label}">
+      <div class="ap-group-label">${g.label}</div>
+      ${g.agents.map(type => `
+        <div class="ap-item" data-type="${type}" onclick="selectAgentPicker('${prefix}','${type}')">
+          <div class="ap-item-icon" style="background:${TYPE_COLOR[type]||'var(--accent)'}1a">
+            <span class="ms sm" style="color:${TYPE_COLOR[type]||'var(--accent)'};font-size:14px">${TYPE_ICONS[type]||'tune'}</span>
+          </div>
+          <div class="ap-item-info">
+            <div class="ap-item-name">${AGENT_LABELS[type]||type}</div>
+            <div class="ap-item-desc">${AGENT_DESCS[type]||''}</div>
+          </div>
+          <span class="ms ap-check" style="display:none">check</span>
+        </div>`).join('')}
+    </div>`).join('');
+  // Add custom group to run picker
+  if (prefix === 'run') refreshCustomGroup();
+  refreshPickerSelection(prefix);
+}
+
+function toggleAgentPicker(prefix) {
+  const body    = document.getElementById(prefix + '-ap-body');
+  const chevron = document.getElementById(prefix + '-ap-chevron');
+  if (!body) return;
+  const opening = body.style.display === 'none';
+  body.style.display = opening ? 'block' : 'none';
+  chevron.classList.toggle('open', opening);
+  if (opening) document.getElementById(prefix + '-ap-search')?.focus();
+}
+
+function selectAgentPicker(prefix, type) {
+  if (prefix === 'run')  selectedRunAgent   = type;
+  if (prefix === 'sched') selectedSchedAgent = type;
+  const tc = TYPE_COLOR[type] || 'var(--accent)';
+  const icon = document.getElementById(prefix + '-ap-icon');
+  icon.style.background = tc + '1a';
+  icon.innerHTML = `<span class="ms sm" style="color:${tc}">${TYPE_ICONS[type]||'tune'}</span>`;
+  document.getElementById(prefix + '-ap-name').textContent = AGENT_LABELS[type] || type;
+  document.getElementById(prefix + '-ap-sub').textContent  = AGENT_SUBS[type]   || '';
+  refreshPickerSelection(prefix);
+  toggleAgentPicker(prefix); // close
+  // Show custom sub-select if needed
+  if (prefix === 'run') {
+    document.getElementById('custom-agent-section').style.display = type === '__custom__' ? 'block' : 'none';
+  }
+}
+
+function refreshPickerSelection(prefix) {
+  const selected = prefix === 'run' ? selectedRunAgent : selectedSchedAgent;
+  document.querySelectorAll(`#${prefix}-ap-list .ap-item`).forEach(item => {
+    const active = item.dataset.type === selected;
+    item.classList.toggle('active', active);
+    item.querySelector('.ap-check').style.display = active ? 'inline-block' : 'none';
+  });
+}
+
+function filterAgentPicker(prefix, q) {
+  q = q.toLowerCase();
+  document.querySelectorAll(`#${prefix}-ap-list .ap-item`).forEach(item => {
+    const name = item.querySelector('.ap-item-name')?.textContent.toLowerCase() || '';
+    const desc = item.querySelector('.ap-item-desc')?.textContent.toLowerCase() || '';
+    item.style.display = !q || name.includes(q) || desc.includes(q) ? 'flex' : 'none';
+  });
+  document.querySelectorAll(`#${prefix}-ap-list .ap-group`).forEach(g => {
+    const anyVisible = [...g.querySelectorAll('.ap-item')].some(i => i.style.display !== 'none');
+    g.style.display = anyVisible ? 'block' : 'none';
+  });
+}
+
+function refreshCustomGroup() {
+  const listEl = document.getElementById('run-ap-list');
+  if (!listEl || !customAgents.length) return;
+  // Remove existing custom group if any
+  listEl.querySelector('[data-group="Custom"]')?.remove();
+  const group = document.createElement('div');
+  group.className = 'ap-group'; group.dataset.group = 'Custom';
+  group.innerHTML = `<div class="ap-group-label">Custom</div>` +
+    customAgents.map(a => `
+      <div class="ap-item" data-type="${a.id}" onclick="selectCustomAgent('${a.id}','${esc(a.name)}')">
+        <div class="ap-item-icon" style="background:rgba(205,214,244,.08)">
+          <span class="ms sm" style="color:var(--text);font-size:14px">tune</span>
+        </div>
+        <div class="ap-item-info">
+          <div class="ap-item-name">${esc(a.name)}</div>
+          <div class="ap-item-desc">Custom agent</div>
+        </div>
+        <span class="ms ap-check" style="display:none">check</span>
+      </div>`).join('');
+  listEl.appendChild(group);
+}
+
+function selectCustomAgent(agentId, name) {
+  selectedRunAgent = '__custom__';
+  document.getElementById('run-ap-icon').style.background = 'rgba(205,214,244,.08)';
+  document.getElementById('run-ap-icon').innerHTML = `<span class="ms sm" style="color:var(--text)">tune</span>`;
+  document.getElementById('run-ap-name').textContent = name;
+  document.getElementById('run-ap-sub').textContent  = 'Custom agent';
+  document.getElementById('run-custom-select').value = agentId;
+  document.getElementById('custom-agent-section').style.display = 'block';
+  toggleAgentPicker('run');
+}
+
+// ── Run ────────────────────────────────────────────────────────────────────
+function onRunTypeChange() {} // kept for compat, picker handles selection now
+
+function submitRun() {
+  const input      = document.getElementById('run-input').value.trim();
+  const model      = getSelectedModel();
+  const useContext = document.getElementById('run-use-context').checked;
+  if (!input) { alert('Please enter a prompt.'); return; }
+  const btn = document.getElementById('run-btn');
+  btn.classList.add('loading');
+  setTimeout(() => btn.classList.remove('loading'), 3000);
+  if (selectedRunAgent === '__custom__') {
+    const agentId = document.getElementById('run-custom-select').value;
+    vscode.postMessage({ type: 'runCustom', agentId, input, model, useContext });
+  } else {
+    vscode.postMessage({ type: 'runAgent', agentType: selectedRunAgent, input, model, useContext });
+  }
+  document.getElementById('run-input').value = '';
+}
+
+// ── Power toggle (Create tab) ──────────────────────────────────────────────
+function togglePower(el) { el.classList.toggle('active'); }
 
 // ── Create ─────────────────────────────────────────────────────────────────
 function submitCreate() {
-  const name=document.getElementById('create-name').value.trim();
-  const systemPrompt=document.getElementById('create-prompt').value.trim();
-  if(!name||!systemPrompt){alert('Name and system prompt are required.');return;}
-  const powers=[...document.querySelectorAll('#panel-create input[type=checkbox]:checked')].map(cb=>cb.value);
-  if(!powers.length) powers.push('none');
-  const model=document.getElementById('create-model').value||undefined;
-  vscode.postMessage({type:'createAgent',config:{name,type:'custom',systemPrompt,powers,model}});
-  document.getElementById('create-name').value='';
-  document.getElementById('create-prompt').value='';
-  document.querySelectorAll('#panel-create input[type=checkbox]').forEach(cb=>cb.checked=false);
-  const fb=document.getElementById('create-feedback');
-  fb.textContent=`Agent "${name}" created!`; fb.style.display='block';
-  setTimeout(()=>fb.style.display='none',3000);
+  const name = document.getElementById('create-name').value.trim();
+  const systemPrompt = document.getElementById('create-prompt').value.trim();
+  if (!name || !systemPrompt) { alert('Name and system prompt are required.'); return; }
+  const powers = [...document.querySelectorAll('#panel-create .power-toggle.active')].map(b => b.dataset.value);
+  if (!powers.length) powers.push('none');
+  const model = document.querySelector('#create-model-chips .model-chip.active')?.dataset.value || undefined;
+  vscode.postMessage({ type: 'createAgent', config: { name, type: 'custom', systemPrompt, powers, model } });
+  document.getElementById('create-name').value = '';
+  document.getElementById('create-prompt').value = '';
+  document.querySelectorAll('#panel-create .power-toggle').forEach(b => b.classList.remove('active'));
+  const fb = document.getElementById('create-feedback');
+  fb.innerHTML = `<div class="create-feedback-ok"><span class="ms sm">check_circle</span> Agent "${esc(name)}" created!</div>`;
+  fb.style.display = 'block';
+  setTimeout(() => fb.style.display = 'none', 3000);
 }
 
 // ── Schedule ───────────────────────────────────────────────────────────────
+function onSchedTypeChange() {} // handled by picker
+
 function submitSchedule() {
-  const agentType=document.getElementById('sched-type').value;
-  const cronExpr=document.getElementById('sched-interval').value;
-  const input=document.getElementById('sched-input').value.trim();
-  if(!input){alert('Please enter a prompt for the scheduled agent.');return;}
-  vscode.postMessage({type:'scheduleAgent',agentType,cronExpr,input});
-  const fb=document.getElementById('sched-feedback');
-  fb.textContent=`Scheduled ${agentType} (${cronExpr})`; fb.style.display='block';
-  setTimeout(()=>fb.style.display='none',3000);
+  const agentType = selectedSchedAgent;
+  const cronExpr  = document.querySelector('#sched-interval-chips .model-chip.active')?.dataset.value || '1h';
+  const input     = document.getElementById('sched-input').value.trim();
+  if (!input) { alert('Please enter a prompt for the scheduled agent.'); return; }
+  vscode.postMessage({ type: 'scheduleAgent', agentType, cronExpr, input });
+  const fb = document.getElementById('sched-feedback');
+  fb.innerHTML = `<div class="create-feedback-ok"><span class="ms sm">check_circle</span> ${esc(AGENT_LABELS[agentType]||agentType)} scheduled every ${cronExpr}</div>`;
+  fb.style.display = 'block';
+  setTimeout(() => fb.style.display = 'none', 3000);
 }
 
 // ── History ────────────────────────────────────────────────────────────────
 function renderHistory(entries) {
-  const list=document.getElementById('history-list');
-  const count=document.getElementById('hist-count');
-  count.textContent=entries.length?`${entries.length} entries`:'No history yet';
-  list.innerHTML='';
-  entries.slice(0,100).forEach(e=>{
-    const d=document.createElement('div');
-    d.className='hist-entry';
-    d.innerHTML=`
-      <div class="he-header">
-        <span class="ms sm" style="color:${TYPE_COLOR[e.agentType]||'var(--text)'}">${TYPE_ICONS[e.agentType]||'tune'}</span>
-        <span class="he-name">${esc(e.agentName)}</span>
-        <span class="badge ${e.success?'done':'error'}">${e.success?'done':'error'}</span>
-        <span class="he-time">${new Date(e.timestamp).toLocaleTimeString()}</span>
+  const list  = document.getElementById('history-list');
+  const count = document.getElementById('hist-count');
+  count.textContent = entries.length ? `${entries.length}` : '';
+  list.innerHTML = '';
+  if (!entries.length) {
+    list.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--muted)"><span class="ms" style="font-size:32px;color:var(--border)">history</span><p style="margin-top:8px;font-size:11px">No runs yet</p></div>`;
+    return;
+  }
+  entries.slice(0, 100).forEach(e => {
+    const d = document.createElement('div');
+    d.className = 'hcard';
+    const tc = TYPE_COLOR[e.agentType] || 'var(--text)';
+    const dur = (e.durationMs / 1000).toFixed(1) + 's';
+    d.innerHTML = `
+      <div class="hcard-top">
+        <div class="hcard-icon" style="background:${e.success ? 'rgba(166,227,161,.12)' : 'rgba(243,139,168,.12)'}">
+          <span class="ms sm" style="color:${tc}">${TYPE_ICONS[e.agentType] || 'tune'}</span>
+        </div>
+        <span class="hcard-name">${esc(e.agentName)}</span>
+        <span class="status-pill ${e.success ? 'done' : 'error'}">${e.success ? 'done' : 'error'}</span>
+        <span class="hcard-time">${new Date(e.timestamp).toLocaleTimeString()}</span>
       </div>
-      <div class="he-input">${esc(e.input.slice(0,80))}</div>
-      <div class="he-out">${esc(e.output)}</div>`;
-    d.onclick=()=>d.classList.toggle('expanded');
+      <div class="hcard-prompt">${esc(e.input.slice(0, 90))}</div>
+      <div class="hcard-meta">
+        <span class="hcard-dur"><span class="ms sm" style="font-size:11px">timer</span>${dur}</span>
+      </div>
+      <div class="hcard-output">${esc(e.output)}</div>`;
+    d.onclick = () => d.classList.toggle('expanded');
     list.appendChild(d);
   });
 }
 
 // ── Graph actions ──────────────────────────────────────────────────────────
-function clearGraph() { if(confirm('Clear all agents?')) vscode.postMessage({type:'clearGraph'}); }
+function clearGraph() { if (confirm('Clear all agents?')) vscode.postMessage({ type: 'clearGraph' }); }
 
 // ── Log ────────────────────────────────────────────────────────────────────
-function appendLog(text,level) {
-  const area=document.getElementById('log-area');
-  const line=document.createElement('div');
-  line.className='log-line '+level;
-  line.textContent=`[${new Date().toLocaleTimeString()}] ${text}`;
-  area.appendChild(line); area.scrollTop=area.scrollHeight;
+function appendLog(text, level) {
+  const area = document.getElementById('log-area');
+  const line = document.createElement('div');
+  line.className = 'log-line ' + level;
+  line.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span><span class="log-msg">${esc(text)}</span>`;
+  area.appendChild(line);
+  area.scrollTop = area.scrollHeight;
 }
 
 // ── Context badge ──────────────────────────────────────────────────────────
@@ -858,23 +1317,22 @@ function updateCtxBadge(ctx) {
   currentCtx=ctx;
   const badge=document.getElementById('ctx-badge');
   const info=document.getElementById('run-ctx-info');
-  if(ctx?.fileName) {
-    badge.textContent=`📎 ${ctx.fileName}`;
-    badge.title=ctx.filePath||'';
-    info.textContent=ctx.selection?`Selection: ${ctx.selection.length} chars`:`File: ${ctx.fileName}`;
+  if (ctx?.fileName) {
+    badge.innerHTML = `<span class="ms sm" style="font-size:12px">insert_drive_file</span> ${esc(ctx.fileName)}`;
+    badge.title = ctx.filePath || '';
+    info.textContent = ctx.selection ? `Selection: ${ctx.selection.length} chars` : `File: ${ctx.fileName}`;
   } else {
-    badge.textContent='No file open';
-    info.textContent='';
+    badge.innerHTML = `<span class="ms sm" style="font-size:12px">insert_drive_file</span> No file open`;
+    info.textContent = '';
   }
 }
 
 // ── Custom agents list ─────────────────────────────────────────────────────
 function updateCustomAgentList(agents) {
-  customAgents=agents;
-  const sel=document.getElementById('run-custom-select');
-  sel.innerHTML=agents.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
-  const opt=document.getElementById('custom-opt');
-  opt.style.display=agents.length?'block':'none';
+  customAgents = agents;
+  const sel = document.getElementById('run-custom-select');
+  sel.innerHTML = agents.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  refreshCustomGroup();
 }
 
 // ── Memory render ──────────────────────────────────────────────────────────
@@ -882,63 +1340,73 @@ const MEM_ICONS = { user:'person', feedback:'feedback', project:'folder_open', r
 const MEM_COLORS = { user:'var(--running)', feedback:'var(--warn)', project:'var(--ok)', reference:'var(--accent2)', unknown:'var(--muted)' };
 
 function renderMemory(files) {
-  const list = document.getElementById('memory-list');
+  const list  = document.getElementById('memory-list');
   const count = document.getElementById('mem-count');
-  count.textContent = files.length ? `${files.length} memories` : 'No memory files found';
-  if (!files.length) { list.innerHTML = `<p style="color:var(--muted);font-size:11px">No .claude/projects/*/memory/ files found.</p>`; return; }
-
+  count.textContent = files.length ? `${files.length}` : '';
+  if (!files.length) {
+    list.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--muted)"><span class="ms" style="font-size:32px;color:var(--border)">psychology</span><p style="margin-top:8px;font-size:11px">No memory files found</p></div>`;
+    return;
+  }
   const grouped = {};
-  for (const f of files) { (grouped[f.type]??=[]).push(f); }
-  const order = ['user','feedback','project','reference','unknown'];
+  for (const f of files) { (grouped[f.type] ??= []).push(f); }
+  const order = ['user', 'feedback', 'project', 'reference', 'unknown'];
 
-  list.innerHTML = order.filter(t=>grouped[t]).map(type => `
-    <div class="mem-section">
-      <div class="mem-section-title">
-        <span class="ms sm" style="color:${MEM_COLORS[type]}">${MEM_ICONS[type]}</span>
-        ${type}
-        <span style="color:var(--muted)">(${grouped[type].length})</span>
+  list.innerHTML = order.filter(t => grouped[t]).map(type => `
+    <div>
+      <div class="mem-group-header">
+        <div style="width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;background:${MEM_COLORS[type]}1a;flex-shrink:0">
+          <span class="ms sm" style="font-size:13px;color:${MEM_COLORS[type]}">${MEM_ICONS[type]}</span>
+        </div>
+        <span class="mem-group-label" style="color:${MEM_COLORS[type]}">${type}</span>
+        <span class="mem-count-pill">${grouped[type].length}</span>
       </div>
-      ${grouped[type].map(f=>`
+      ${grouped[type].map(f => `
         <div class="mem-card" onclick="this.classList.toggle('expanded')">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-            <div class="mc-name">${esc(f.name)}</div>
-            <span class="mem-type-badge ${f.type}">${f.type}</span>
+          <div class="mem-card-top">
+            <div class="mem-card-icon" style="background:${MEM_COLORS[type]}1a">
+              <span class="ms sm" style="font-size:13px;color:${MEM_COLORS[type]}">${MEM_ICONS[type]}</span>
+            </div>
+            <div><div class="mem-card-name">${esc(f.name)}</div></div>
           </div>
-          <div class="mc-desc">${esc(f.description)}</div>
-          <div class="mc-body">${esc(f.body)}</div>
+          <div class="mem-card-desc">${esc(f.description)}</div>
+          <div class="mem-card-body">${esc(f.body)}</div>
         </div>`).join('')}
     </div>`).join('');
 }
 
 // ── Usage render ───────────────────────────────────────────────────────────
 function renderUsage(stats) {
-  document.getElementById('us-total').textContent = stats.totalRuns;
-  document.getElementById('us-rate').textContent = stats.successRate + '%';
-  document.getElementById('us-rate').style.color = stats.successRate > 80 ? 'var(--ok)' : stats.successRate > 50 ? 'var(--warn)' : 'var(--err)';
+  const totalEl = document.getElementById('us-total');
+  const rateEl  = document.getElementById('us-rate');
+  totalEl.textContent = stats.totalRuns;
+  rateEl.textContent  = stats.successRate + '%';
+  rateEl.style.color  = stats.successRate > 80 ? 'var(--ok)' : stats.successRate > 50 ? 'var(--warn)' : 'var(--err)';
 
-  // Bars
-  const bars = document.getElementById('us-bars');
-  const types = Object.entries(stats.byType).sort((a,b)=>b[1].runs-a[1].runs);
+  const bars    = document.getElementById('us-bars');
+  const types   = Object.entries(stats.byType).sort((a, b) => b[1].runs - a[1].runs);
   const maxRuns = types[0]?.[1].runs || 1;
-  bars.innerHTML = types.map(([type, d]) => `
-    <div class="usage-bar-row">
-      <div class="usage-bar-label" title="${type}">
-        <span class="ms sm" style="color:${TYPE_COLOR[type]||'var(--muted)'};font-size:12px">${TYPE_ICONS[type]||'tune'}</span>
-        ${type.replace(/-/g,' ')}
-      </div>
-      <div class="usage-bar-track">
-        <div class="usage-bar-fill" style="width:${Math.round(d.runs/maxRuns*100)}%;background:${TYPE_COLOR[type]||'var(--accent)'}"></div>
-      </div>
-      <div class="usage-bar-count">${d.runs}</div>
-    </div>
-    <div style="font-size:9px;color:var(--muted);margin:-3px 0 5px 97px">avg ${(d.avgDuration/1000).toFixed(1)}s · ${d.errors} err</div>
-  `).join('');
+  bars.innerHTML = types.map(([type, d]) => {
+    const tc  = TYPE_COLOR[type] || 'var(--accent)';
+    const pct = Math.round(d.runs / maxRuns * 100);
+    return `
+      <div class="ubar-row">
+        <div class="ubar-top">
+          <div class="ubar-icon" style="background:${tc}1a">
+            <span class="ms sm" style="font-size:12px;color:${tc}">${TYPE_ICONS[type] || 'tune'}</span>
+          </div>
+          <span class="ubar-name">${type.replace(/-/g, ' ')}</span>
+          <span class="ubar-count">${d.runs}</span>
+        </div>
+        <div class="ubar-track"><div class="ubar-fill" style="width:${pct}%;background:${tc}"></div></div>
+        <div class="ubar-meta">avg ${(d.avgDuration / 1000).toFixed(1)}s · ${d.errors} err</div>
+      </div>`;
+  }).join('');
 
-  // Timeline dots
   const tl = document.getElementById('timeline-wrap');
-  tl.innerHTML = stats.recentRuns.map(r =>
-    `<span class="timeline-dot" style="background:${r.success?'var(--ok)':'var(--err)'}" title="${r.agentType} · ${(r.durationMs/1000).toFixed(1)}s · ${new Date(r.timestamp).toLocaleTimeString()}"></span>`
-  ).join('');
+  tl.innerHTML = stats.recentRuns.map(r => {
+    const tc = TYPE_COLOR[r.agentType] || 'var(--muted)';
+    return `<span class="timeline-dot" style="background:${r.success ? 'var(--ok)' : 'var(--err)'};box-shadow:0 0 4px ${r.success ? 'rgba(166,227,161,.4)' : 'rgba(243,139,168,.4)'}" title="${r.agentType} · ${(r.durationMs / 1000).toFixed(1)}s · ${new Date(r.timestamp).toLocaleTimeString()}"></span>`;
+  }).join('');
 }
 
 // ── Message handler ────────────────────────────────────────────────────────
@@ -948,7 +1416,10 @@ window.addEventListener('message', e=>{
     case 'addNode':
       nodes.set(msg.node.id,msg.node);
       getOrCreatePos(msg.node.id);
-      if(selectedId===msg.node.id) renderDetail();
+      // Auto-select new node and switch to detail tab
+      selectedId = msg.node.id;
+      switchTab('detail');
+      renderDetail();
       break;
     case 'updateNode': {
       const n=nodes.get(msg.id);
@@ -985,6 +1456,20 @@ window.addEventListener('message', e=>{
 vscode.postMessage({type:'ready'});
 
 const BUILTIN_AGENTS = __BUILTIN_AGENTS__;
+
+// Build agent pickers
+buildAgentPicker('run');
+buildAgentPicker('sched');
+// Initialise run picker header to default selection
+selectAgentPicker('run', selectedRunAgent);
+selectAgentPicker('sched', selectedSchedAgent);
+// Re-open pickers (selectAgentPicker closes them)
+document.getElementById('run-ap-body').style.display   = 'none';
+document.getElementById('sched-ap-body').style.display = 'none';
+
+// Auto-resize all textareas on load
+document.querySelectorAll('textarea').forEach(t => t.addEventListener('input', () => autoResize(t)));
+
 </script>
 </body>
 </html>
