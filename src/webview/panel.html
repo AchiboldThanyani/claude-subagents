@@ -47,8 +47,9 @@
   #sidebar-tabs{display:flex;border-bottom:1px solid var(--border);overflow:hidden}
   .stab{flex:1;display:flex;align-items:center;justify-content:center;padding:9px 0 8px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:color .15s,border-color .15s;position:relative}
   .stab:hover{color:var(--text)}
-  .stab .ms{font-size:16px;line-height:1}
+  .stab .ms{font-size:20px;line-height:1;font-variation-settings:'FILL' 0,'wght' 300,'GRAD' 0,'opsz' 24}
   .stab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .stab.active .ms{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
   #sidebar-body{flex:1;overflow-y:auto;padding:10px}
   .detail-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
   .agent-icon{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
@@ -117,7 +118,6 @@
   #output-modal-header{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}
   #output-modal-title{font-weight:600;font-size:13px;flex:1}
   #output-modal-body{flex:1;overflow-y:auto;padding:14px;font-family:'JetBrains Mono','Cascadia Code','Fira Code',monospace;font-size:11px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:var(--text)}
-  #output-modal-actions{display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
 
   /* ── Memory cards ── */
   .mem-section{margin-bottom:14px}
@@ -302,6 +302,16 @@
   .cancel-btn{width:100%;margin-top:10px;background:rgba(243,139,168,.1);border:1px solid rgba(243,139,168,.25);color:var(--err);border-radius:7px;padding:7px;cursor:pointer;font-size:11px;font-weight:600;transition:all .15s;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px}
   .cancel-btn:hover{background:rgba(243,139,168,.2)}
 
+  /* ── Single chat flow ── */
+  .chat-flow{margin-top:10px;overflow-y:auto;max-height:460px;font-size:11px;line-height:1.7}
+  .chat-response{font-family:'JetBrains Mono','Cascadia Code',monospace;font-size:10.5px;line-height:1.75;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+  .chat-response.live::after{content:'▋';animation:blink .85s step-end infinite;color:var(--running);margin-left:1px}
+  .chat-you{display:flex;align-items:baseline;gap:7px;margin:12px 0 6px;padding-top:10px;border-top:1px solid var(--border)}
+  .chat-you-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);flex-shrink:0}
+  .chat-you-text{font-size:11px;color:var(--text);word-break:break-word}
+  .chat-expand-btn{display:inline-flex;align-items:center;gap:3px;background:none;border:1px solid var(--border);color:var(--muted);font-size:10px;padding:2px 7px;border-radius:5px;cursor:pointer;margin-top:8px;font-family:inherit}
+  .chat-expand-btn:hover{color:var(--text);border-color:var(--accent)}
+
   /* ── Conversation thread (detail) ── */
   .conv-thread{margin-top:14px;border-top:1px solid var(--border);padding-top:10px}
   .conv-thread-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:flex;align-items:center;gap:5px;margin-bottom:10px}
@@ -314,11 +324,14 @@
   .conv-msg-text{background:var(--surface);border:1px solid var(--border);border-radius:0 7px 7px 7px;padding:7px 10px;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow-y:auto}
   .conv-msg.user .conv-msg-text{border-color:rgba(124,106,247,.22);border-radius:7px 0 7px 7px}
   .conv-msg.assistant .conv-msg-text{border-color:rgba(94,234,212,.18)}
-  .conv-compose{position:relative;margin-top:8px}
-  .conv-compose textarea{width:100%;min-height:60px;resize:none;font-size:11px;border-radius:8px;padding:8px 38px 8px 10px;box-sizing:border-box}
-  .conv-compose-send{position:absolute;bottom:6px;right:6px;width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:6px;background:var(--accent);border:none}
-  .conv-compose-send:hover{opacity:.85}
-  .conv-hint{font-size:9px;color:var(--muted);text-align:right;margin-top:3px}
+  .conv-compose{position:relative;margin-top:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;transition:border-color .15s}
+  .conv-compose:focus-within{border-color:var(--accent)}
+  .conv-compose textarea{width:100%;min-height:52px;resize:none;font-size:11px;border:none;background:transparent;border-radius:10px;padding:10px 44px 10px 12px;box-sizing:border-box;outline:none;color:var(--text)}
+  .conv-compose-send{position:absolute;bottom:7px;right:7px;width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--accent);border:none;cursor:pointer;transition:all .15s}
+  .conv-compose-send:hover{background:#6a58e0;transform:scale(1.05)}
+  .conv-compose-send:active{transform:scale(.96)}
+  .conv-compose-send .ms{font-size:16px}
+  .conv-hint{font-size:9px;color:var(--muted);text-align:right;margin-top:4px;letter-spacing:.02em}
   .thinking-row{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:10px;color:var(--running)}
   .thinking-dots::after{content:'';animation:tdots 1.4s steps(3,end) infinite}
   @keyframes tdots{0%{content:''}33%{content:'.'}66%{content:'..'}100%{content:'...'}}
@@ -347,12 +360,6 @@
       <button class="secondary sm" onclick="closeModal()"><span class="ms sm">close</span></button>
     </div>
     <div id="output-modal-body"></div>
-    <div id="output-modal-actions">
-      <button class="sm" onclick="modalCopy()"><span class="ms sm">content_copy</span> Copy</button>
-      <button class="sm secondary" onclick="modalDiff()"><span class="ms sm">difference</span> Diff</button>
-      <button class="sm secondary" onclick="modalInsert()"><span class="ms sm">keyboard_return</span> Insert</button>
-      <button class="sm secondary" onclick="modalExport()"><span class="ms sm">download</span> Export MD</button>
-    </div>
   </div>
 </div>
 
@@ -839,75 +846,58 @@ function renderDetail() {
     ...powers.map(p => `<span class="detail-chip"><span class="ms sm" style="font-size:11px">${POWER_ICONS[p] || 'bolt'}</span>${p}</span>`),
   ].filter(Boolean).join('');
 
-  // ── Output section ─────────────────────────────────────────────────────
-  let outputHtml = '';
-  if (node.streamBuffer) {
-    outputHtml = `
-      <div class="output-area">
-        <div class="output-header">
-          <span class="output-header-label"><span class="ms sm" style="font-size:11px">stream</span> Streaming</span>
-        </div>
-        <div class="output-text stream">${esc(node.streamBuffer)}</div>
-      </div>`;
-  } else if (node.output) {
-    const preview = node.output.slice(0, 900);
-    const truncated = node.output.length > 900;
-    outputHtml = `
-      <div class="output-area">
-        <div class="output-header">
-          <span class="output-header-label"><span class="ms sm" style="font-size:11px">article</span> Output</span>
-          <button class="sm secondary" onclick="openModal('${node.id}')" style="padding:2px 7px;font-size:10px"><span class="ms sm" style="font-size:12px">open_in_full</span> Expand</button>
-        </div>
-        <div class="output-text">${esc(preview)}${truncated ? '\n\n↗  expand for full output' : ''}</div>
-        <div class="output-actions">
-          <button class="sm" onclick="copyOutput()"><span class="ms sm">content_copy</span> Copy</button>
-          <button class="sm secondary" onclick="applyDiff()"><span class="ms sm">difference</span> Diff</button>
-          <button class="sm secondary" onclick="insertInline()"><span class="ms sm">keyboard_return</span> Insert</button>
-          <button class="sm secondary" onclick="exportMd()"><span class="ms sm">download</span> MD</button>
-        </div>
-      </div>`;
+  // ── Single continuous chat flow ───────────────────────────────────────
+  // msgs[0] = initial user prompt (skip — already in chips)
+  // msgs[1] = first response
+  // msgs[2n]   = follow-up user message  → "You:" divider
+  // msgs[2n+1] = follow-up response      → text below
+  const msgs = node.messages || [];
+  let flowHtml = '';
+
+  // First response or live stream on first run
+  if (node.streamBuffer && msgs.length <= 1) {
+    flowHtml += `<div class="chat-response live">${esc(node.streamBuffer)}</div>`;
+  } else if (msgs[1]) {
+    flowHtml += `<div class="chat-response">${esc(msgs[1].text)}</div>`;
   }
 
-  // ── Error ──────────────────────────────────────────────────────────────
-  const errHtml = node.error ? `
-    <div class="detail-section">
-      <div class="detail-section-title"><span class="ms sm" style="font-size:11px;color:var(--err)">error_outline</span> Error</div>
-      <div class="output-text" style="color:var(--err);border-color:rgba(243,139,168,.22)">${esc(node.error)}</div>
-    </div>` : '';
+  // Follow-up exchanges
+  for (let i = 2; i < msgs.length; i++) {
+    const m = msgs[i];
+    if (m.role === 'user') {
+      flowHtml += `<div class="chat-you"><span class="chat-you-label">You</span><span class="chat-you-text">${esc(m.text)}</span></div>`;
+    } else {
+      const isLast = i === msgs.length - 1;
+      const streaming = isLast && !!node.streamBuffer;
+      flowHtml += `<div class="chat-response${streaming ? ' live' : ''}">${esc(streaming ? node.streamBuffer : m.text)}</div>`;
+    }
+  }
 
-  // ── Cancel ─────────────────────────────────────────────────────────────
+  // Streaming follow-up (user sent, awaiting reply)
+  if (node.streamBuffer && msgs.length > 1 && msgs[msgs.length - 1]?.role === 'user') {
+    flowHtml += `<div class="chat-response live">${esc(node.streamBuffer)}</div>`;
+  }
+
+  // Single expand button — always at the bottom, only when there's content
+  const hasContent = node.output || node.streamBuffer;
+  const expandBtn = hasContent && node.status !== 'running'
+    ? `<button class="chat-expand-btn" onclick="openModal('${node.id}')"><span class="ms sm" style="font-size:12px">open_in_full</span> Expand</button>`
+    : '';
+
+  const errHtml = node.error ? `
+    <div style="margin-top:8px;background:rgba(243,139,168,.08);border:1px solid rgba(243,139,168,.22);border-radius:7px;padding:8px 10px;font-size:10.5px;color:var(--err)">${esc(node.error)}</div>` : '';
+
   const cancelHtml = node.status === 'running' ? `
     <button class="cancel-btn" onclick="vscode.postMessage({type:'cancelAgent',id:'${node.id}'})">
       <span class="ms sm">stop_circle</span> Stop Agent
     </button>` : '';
 
-  // ── Conversation thread ─────────────────────────────────────────────────
-  const msgs = node.messages || [];
-  const threadMsgs = msgs.slice(2); // skip initial prompt + first reply (shown above)
-  const threadHtml = msgs.length > 0 ? `
-    <div class="conv-thread">
-      <div class="conv-thread-title">
-        <span class="ms sm">forum</span> Conversation
-        ${node.turns > 0 ? `<span style="color:var(--accent);font-size:10px">${node.turns} turn${node.turns !== 1 ? 's' : ''}</span>` : ''}
-      </div>
-      ${threadMsgs.map(m => `
-        <div class="conv-msg ${m.role}">
-          <div class="conv-msg-avatar ${m.role}">
-            <span class="ms sm" style="font-size:13px">${m.role === 'user' ? 'person' : 'smart_toy'}</span>
-          </div>
-          <div class="conv-msg-body">
-            <div class="conv-msg-meta">${m.role === 'user' ? 'You' : 'Claude'} · ${new Date(m.timestamp).toLocaleTimeString()}</div>
-            <div class="conv-msg-text">${esc(m.text.slice(0, 500))}${m.text.length > 500 ? '\n…' : ''}</div>
-          </div>
-        </div>`).join('')}
-      ${node.status === 'running'
-        ? `<div class="thinking-row"><span class="spinner"></span> Responding<span class="thinking-dots"></span></div>`
-        : `<div class="conv-compose">
-             <textarea id="conv-input-${node.id}" placeholder="Follow up…" onkeydown="handleConvKey(event,'${node.id}')" oninput="autoResize(this)"></textarea>
-             <button class="conv-compose-send" onclick="sendContinue('${node.id}')"><span class="ms sm">send</span></button>
-           </div>
-           <div class="conv-hint">Ctrl+Enter to send</div>`}
-    </div>` : '';
+  const composeHtml = node.status !== 'running' ? `
+    <div class="conv-compose" style="margin-top:10px">
+      <textarea id="conv-input-${node.id}" placeholder="Follow up…" onkeydown="handleConvKey(event,'${node.id}')" oninput="autoResize(this)"></textarea>
+      <button class="conv-compose-send" onclick="sendContinue('${node.id}')"><span class="ms sm">send</span></button>
+    </div>
+    <div class="conv-hint">Ctrl+Enter to send</div>` : '';
 
   detail.innerHTML = `
     <div class="detail-hero">
@@ -923,16 +913,17 @@ function renderDetail() {
       </div>
       <div class="detail-chips">${chips}</div>
     </div>
-    ${node.input ? `
-      <div class="detail-section">
-        <div class="detail-section-title"><span class="ms sm" style="font-size:11px">chat_bubble</span> Input</div>
-        <div class="detail-input-box">${esc(node.input.slice(0, 400))}${node.input.length > 400 ? '…' : ''}</div>
-      </div>` : ''}
-    ${outputHtml}
-    ${errHtml}
-    ${cancelHtml}
-    ${threadHtml}
+    <div class="chat-flow">
+      ${flowHtml}
+      ${errHtml}
+      ${cancelHtml}
+      ${expandBtn}
+    </div>
+    ${composeHtml}
   `;
+
+  const flow = detail.querySelector('.chat-flow');
+  if (flow) flow.scrollTop = flow.scrollHeight;
 }
 
 function copyOutput() {
@@ -1025,11 +1016,32 @@ let modalNodeId = null;
 function openModal(nodeId) {
   modalNodeId = nodeId;
   const node = nodes.get(nodeId);
-  if (!node?.output) return;
+  if (!node) return;
+  // Build full conversation — all turns stitched together
+  const msgs = node.messages || [];
+  let full = '';
+  if (msgs.length >= 2) {
+    // First exchange
+    full += msgs[1]?.text || '';
+    // Follow-ups
+    for (let i = 2; i < msgs.length; i++) {
+      const m = msgs[i];
+      if (m.role === 'user') {
+        full += '\n\n— You —\n' + m.text;
+      } else {
+        full += '\n\n' + m.text;
+      }
+    }
+    // Live stream appended if still going
+    if (node.streamBuffer) full += '\n\n' + node.streamBuffer;
+  } else {
+    full = node.output || node.streamBuffer || '';
+  }
+  if (!full.trim()) return;
   document.getElementById('output-modal-icon').textContent = TYPE_ICONS[node.type]||'tune';
   document.getElementById('output-modal-icon').style.color = TYPE_COLOR[node.type]||'var(--accent)';
-  document.getElementById('output-modal-title').textContent = node.name + ' — Output';
-  document.getElementById('output-modal-body').textContent = node.output;
+  document.getElementById('output-modal-title').textContent = node.name;
+  document.getElementById('output-modal-body').textContent = full;
   document.getElementById('output-modal').classList.add('show');
 }
 function closeModal() {

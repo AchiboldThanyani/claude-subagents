@@ -57,28 +57,40 @@ const CHROME_PATTERNS = [
   /No recent activity/,
   /^\s*>\s*$/,
   /^[▐▛▜▝▞▟█▘▙╭╮╰╯│]+\s*$/,
-  /^─{10,}$/,
+  /^\│/,                           // any box-bordered line (banner content)
+  /^─{3,}$|^={3,}$/,               // horizontal rules we inject or TUI draws
   /Pollinating…|Bloviating…|Ruminating…|Cogitating…|Contemplating…/,
   /Deliberating…|Meditating…|Pondering…|Perambulating…|Theorizing…/,
+  /Flibbertigibbeting|Flibbertigibbet/i,
   /esc to interrupt/i,
   /Do you want to proceed/i,
   /Use skill ".*:.*"\?/,
   /bypass permissions/i,
   /shift\+tab to cycle/i,
-  /ctrl\+g to edit/i,
-  /^[◐◑◒◓⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s/,   // spinner chars at line start
-  /·\s*\/\w+/,                   // status indicators like ·/effort
-  /^\s*\d+\s+\w+\.ts\b/,         // file listings from status bar
+  /ctrl\+[a-z] to /i,
+  /^[◐◑◒◓⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s/,
+  /·\s*\/\w+/,
+  /^\s*\d+\s+\w+\.ts\b/,
   /lukhwaren|Organization$/,
   /AppData.+Programs.+VSCode/i,
   /claude\.ai|anthropic\.com/i,
+  /Sonnet\s+\d|Haiku\s+\d|Opus\s+\d/,   // model name status lines
+  /Claude Pro|Claude Max/,
+  /^>\s*---/,                             // echoed prompt + context marker
+  /^#\s*Context\s*$/,                     // injected context headers
+  /^##\s*(Workspace|File|Selection|Language)\s*$/,
 ];
 
 // Decoration chars used in Claude Code's animated spinner / thinking display
 const DECORATION_CHARS = /[✶✻✽✸✼✾●✢·✦✧✨✩✪✫✬✭✮✯✰✱✲✳✴✵✺✹▸▹►▻◂◃◄◅◆◇◈◉◊◌◍◎◐◑◒◓◔◕↓↑←→⏵⏶⏷⏸⏹⏺*]/g;
 
 function cleanOutput(raw: string): string {
-  return stripAnsi(raw)
+  let text = stripAnsi(raw);
+  // Strip injected context blocks (---\n# Context\n...\n---)
+  text = text.replace(/---\r?\n#\s*Context[\s\S]*?---\r?\n?/g, '');
+  // Strip spinner/thinking noise words that slip past line filters
+  text = text.replace(/\b(thinking|Flibbertigibbeting|Flibbertigibbet)\b/g, '');
+  return text
     .split('\n')
     .filter(line => {
       const l = line.trim();
@@ -86,6 +98,7 @@ function cleanOutput(raw: string): string {
       return !CHROME_PATTERNS.some(p => p.test(l));
     })
     .join('\n')
+    .replace(/\n{3,}/g, '\n\n')   // collapse excessive blank lines
     .trim();
 }
 
