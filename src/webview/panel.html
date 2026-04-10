@@ -423,6 +423,7 @@
       <div class="stab"        id="tab-history"   onclick="switchTab('history')" title="History"><span class="ms sm">history</span></div>
       <div class="stab"        id="tab-log"       onclick="switchTab('log')"    title="Log"><span class="ms sm">terminal</span></div>
       <div class="stab"        id="tab-rules"     onclick="switchTab('rules')"  title="Rules"><span class="ms sm">rule</span></div>
+      <div class="stab"        id="tab-constitution" onclick="switchTab('constitution')" title="Constitution"><span class="ms sm">gavel</span></div>
     </div>
 
     <div id="sidebar-body">
@@ -639,6 +640,45 @@
         </div>
 
         <div id="rules-body" style="padding:8px 12px;display:flex;flex-direction:column;gap:14px"></div>
+      </div>
+
+      <!-- CONSTITUTION -->
+      <div id="panel-constitution" style="display:none;height:100%;display:none;flex-direction:column">
+        <div class="tab-header">
+          <span class="tab-header-title"><span class="ms sm">gavel</span> Constitution</span>
+          <div style="display:flex;gap:4px">
+            <button class="sm secondary" onclick="loadConstitutionTemplate()" title="Load starter template"><span class="ms sm">auto_awesome</span></button>
+            <button class="sm secondary" onclick="clearConstitution()" title="Clear constitution"><span class="ms sm">delete_sweep</span></button>
+          </div>
+        </div>
+
+        <!-- Info bar -->
+        <div id="const-info" style="padding:6px 12px;font-size:10px;color:var(--muted);background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+          <span id="const-scope-badge" style="padding:2px 7px;border-radius:4px;background:var(--surface);font-size:10px"></span>
+          <span id="const-path" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+          <span id="const-chars" style="flex-shrink:0"></span>
+        </div>
+
+        <!-- Empty state -->
+        <div id="const-empty" style="text-align:center;padding:30px 0;color:var(--muted)">
+          <span class="ms" style="font-size:32px;color:var(--border)">gavel</span>
+          <p style="margin-top:8px;font-size:11px">No constitution yet</p>
+          <p style="font-size:11px;color:var(--muted);margin-top:4px">Click <strong>✦</strong> to load a starter template</p>
+        </div>
+
+        <!-- Editor -->
+        <div id="const-editor-wrap" style="flex:1;display:flex;flex-direction:column;padding:8px 12px;gap:8px;overflow:hidden">
+          <textarea id="const-editor"
+            placeholder="Write your Codebase Constitution in Markdown..."
+            style="flex:1;min-height:200px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;resize:none;line-height:1.6;box-sizing:border-box"
+            oninput="onConstitutionEdit()"
+          ></textarea>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="const-unsaved" style="font-size:10px;color:var(--warn);display:none">● Unsaved changes</span>
+            <span style="flex:1"></span>
+            <button onclick="saveConstitution()" style="padding:6px 16px;background:var(--accent);border:none;color:#fff;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600">Save</button>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -1256,15 +1296,18 @@ function toggleSidebar() {
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
-const TABS=['detail','run','create','schedule','memory','usage','history','log','rules'];
+const TABS=['detail','run','create','schedule','memory','usage','history','log','rules','constitution'];
 function switchTab(name) {
   TABS.forEach(t=>{
-    document.getElementById('panel-'+t).style.display=t===name?'block':'none';
-    document.getElementById('tab-'+t).classList.toggle('active',t===name);
+    const p = document.getElementById('panel-'+t);
+    if (p) p.style.display = t === name ? (t === 'constitution' ? 'flex' : 'block') : 'none';
+    const tb = document.getElementById('tab-'+t);
+    if (tb) tb.classList.toggle('active', t === name);
   });
-  if (name==='memory') vscode.postMessage({type:'requestMemory'});
-  if (name==='usage')  vscode.postMessage({type:'requestUsage'});
-  if (name==='rules')  vscode.postMessage({type:'requestRules'});
+  if (name==='memory')       vscode.postMessage({type:'requestMemory'});
+  if (name==='usage')        vscode.postMessage({type:'requestUsage'});
+  if (name==='rules')        vscode.postMessage({type:'requestRules'});
+  if (name==='constitution') vscode.postMessage({type:'requestConstitution'});
 }
 
 // ── Output modal ───────────────────────────────────────────────────────────
@@ -1677,6 +1720,86 @@ function renderUsage(stats) {
   }).join('');
 }
 
+// ── Constitution ───────────────────────────────────────────────────────────
+const CONSTITUTION_TEMPLATE = `# Codebase Constitution
+
+## Architecture Overview
+<!-- Describe the high-level structure of this project -->
+
+## Coding Standards
+<!-- Language, formatting, naming conventions, etc. -->
+
+## Patterns to Follow
+<!-- Design patterns, abstractions, or idioms used in this codebase -->
+
+## Patterns to Avoid
+<!-- Anti-patterns, forbidden approaches, things that have burned you before -->
+
+## Key Decisions
+<!-- Important architectural or technical decisions and why they were made -->
+
+## Team Conventions
+<!-- PR process, commit style, review expectations, etc. -->
+`;
+
+let constitutionDirty = false;
+
+function renderConstitution(content, info) {
+  const editor      = document.getElementById('const-editor');
+  const emptyState  = document.getElementById('const-empty');
+  const editorWrap  = document.getElementById('const-editor-wrap');
+  const scopeBadge  = document.getElementById('const-scope-badge');
+  const pathEl      = document.getElementById('const-path');
+  const charsEl     = document.getElementById('const-chars');
+
+  editor.value = content;
+  constitutionDirty = false;
+  document.getElementById('const-unsaved').style.display = 'none';
+
+  if (info) {
+    scopeBadge.textContent = info.isWorkspace ? 'workspace' : 'global';
+    scopeBadge.style.color = info.isWorkspace ? 'var(--ok)' : 'var(--accent2)';
+    pathEl.textContent = info.path;
+    pathEl.title = info.path;
+    charsEl.textContent = info.charCount > 0 ? `${info.charCount} chars` : '';
+  }
+
+  const hasContent = content.trim().length > 0;
+  emptyState.style.display  = hasContent ? 'none' : 'block';
+  editorWrap.style.display  = hasContent ? 'flex' : 'none';
+}
+
+function onConstitutionEdit() {
+  constitutionDirty = true;
+  document.getElementById('const-unsaved').style.display = 'inline';
+  const len = document.getElementById('const-editor').value.length;
+  document.getElementById('const-chars').textContent = len > 0 ? `${len} chars` : '';
+}
+
+function saveConstitution() {
+  const content = document.getElementById('const-editor').value;
+  vscode.postMessage({ type: 'saveConstitution', content });
+  constitutionDirty = false;
+  document.getElementById('const-unsaved').style.display = 'none';
+}
+
+function clearConstitution() {
+  if (!confirm('Clear the Codebase Constitution? This cannot be undone.')) return;
+  vscode.postMessage({ type: 'clearConstitution' });
+}
+
+function loadConstitutionTemplate() {
+  const editor = document.getElementById('const-editor');
+  if (editor.value.trim() && !confirm('Replace existing content with the starter template?')) return;
+  editor.value = CONSTITUTION_TEMPLATE;
+  const emptyState = document.getElementById('const-empty');
+  const editorWrap = document.getElementById('const-editor-wrap');
+  emptyState.style.display = 'none';
+  editorWrap.style.display = 'flex';
+  onConstitutionEdit();
+  editor.focus();
+}
+
 // ── Rules render ───────────────────────────────────────────────────────────
 function renderRules(store) {
   const body = document.getElementById('rules-body');
@@ -1825,6 +1948,9 @@ window.addEventListener('message', e=>{
       break;
     case 'rules':
       renderRules(msg.store);
+      break;
+    case 'constitution':
+      renderConstitution(msg.content, msg.info);
       break;
   }
 });

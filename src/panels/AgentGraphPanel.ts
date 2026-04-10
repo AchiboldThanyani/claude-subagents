@@ -7,6 +7,7 @@ import { HistoryManager } from '../history/HistoryManager';
 import { ContextManager } from '../context/ContextManager';
 import { ExtToWebMsg, MemoryFile, UsageStats, WebToExtMsg } from '../types';
 import { BUILTIN_AGENTS } from '../orchestrator/builtinAgents';
+import { CONSTITUTION_TEMPLATE } from '../constitution/ConstitutionManager';
 
 export class AgentGraphPanel {
   public static currentPanel: AgentGraphPanel | undefined;
@@ -88,8 +89,15 @@ export class AgentGraphPanel {
         this.panel.webview.postMessage({ type: 'history', entries: this.history.getAll() } satisfies ExtToWebMsg);
         this.panel.webview.postMessage({ type: 'memory', files: this.readMemoryFiles() } satisfies ExtToWebMsg);
         this.panel.webview.postMessage({ type: 'usage', stats: this.computeUsage() } satisfies ExtToWebMsg);
+        if (this.orchestrator.rules) {
+          this.panel.webview.postMessage({ type: 'rules', store: this.orchestrator.rules.getStore() } satisfies ExtToWebMsg);
+        }
         const ctx = ContextManager.capture();
         this.panel.webview.postMessage({ type: 'context', ctx } satisfies ExtToWebMsg);
+        if (this.orchestrator.constitution) {
+          const c = this.orchestrator.constitution;
+          this.panel.webview.postMessage({ type: 'constitution', content: c.read(), info: c.getInfo() } satisfies ExtToWebMsg);
+        }
         break;
       }
 
@@ -251,6 +259,64 @@ export class AgentGraphPanel {
 
       case 'requestUsage': {
         this.panel.webview.postMessage({ type: 'usage', stats: this.computeUsage() } satisfies ExtToWebMsg);
+        break;
+      }
+
+      case 'requestRules': {
+        if (this.orchestrator.rules) {
+          this.panel.webview.postMessage({ type: 'rules', store: this.orchestrator.rules.getStore() } satisfies ExtToWebMsg);
+        }
+        break;
+      }
+
+      case 'addRule': {
+        if (!this.orchestrator.rules) break;
+        if (msg.scope === 'global') {
+          this.orchestrator.rules.addGlobal(msg.text);
+        } else if (msg.agentType) {
+          this.orchestrator.rules.addForAgent(msg.agentType as import('../types').AgentType, msg.text);
+        }
+        this.panel.webview.postMessage({ type: 'rules', store: this.orchestrator.rules.getStore() } satisfies ExtToWebMsg);
+        break;
+      }
+
+      case 'removeRule': {
+        if (!this.orchestrator.rules) break;
+        this.orchestrator.rules.remove(msg.id);
+        this.panel.webview.postMessage({ type: 'rules', store: this.orchestrator.rules.getStore() } satisfies ExtToWebMsg);
+        break;
+      }
+
+      case 'toggleRule': {
+        if (!this.orchestrator.rules) break;
+        this.orchestrator.rules.toggle(msg.id);
+        this.panel.webview.postMessage({ type: 'rules', store: this.orchestrator.rules.getStore() } satisfies ExtToWebMsg);
+        break;
+      }
+
+      case 'requestConstitution': {
+        if (this.orchestrator.constitution) {
+          const c = this.orchestrator.constitution;
+          this.panel.webview.postMessage({ type: 'constitution', content: c.read(), info: c.getInfo() } satisfies ExtToWebMsg);
+        }
+        break;
+      }
+
+      case 'saveConstitution': {
+        if (!this.orchestrator.constitution) break;
+        this.orchestrator.constitution.write(msg.content);
+        const c = this.orchestrator.constitution;
+        this.panel.webview.postMessage({ type: 'constitution', content: c.read(), info: c.getInfo() } satisfies ExtToWebMsg);
+        vscode.window.showInformationMessage('Constitution saved.');
+        break;
+      }
+
+      case 'clearConstitution': {
+        if (!this.orchestrator.constitution) break;
+        this.orchestrator.constitution.clear();
+        const c = this.orchestrator.constitution;
+        this.panel.webview.postMessage({ type: 'constitution', content: '', info: c.getInfo() } satisfies ExtToWebMsg);
+        vscode.window.showInformationMessage('Constitution cleared.');
         break;
       }
 

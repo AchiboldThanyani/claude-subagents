@@ -106,7 +106,9 @@ export type ExtToWebMsg =
   | { type: 'agentList';     builtins: Array<Omit<AgentConfig,'id'>>; custom: AgentConfig[] }
   | { type: 'activeAgents';  count: number }
   | { type: 'memory';        files: MemoryFile[] }
-  | { type: 'usage';         stats: UsageStats };
+  | { type: 'usage';         stats: UsageStats }
+  | { type: 'rules';         store: import('./rules/RulesManager').RulesStore }
+  | { type: 'constitution';  content: string; info: import('./constitution/ConstitutionManager').ConstitutionInfo };
 
 /** Messages sent from WebView → Extension Host */
 export type WebToExtMsg =
@@ -132,7 +134,14 @@ export type WebToExtMsg =
   | { type: 'removeTemplate';    id: string }
   | { type: 'runPipeline';       useContext?: boolean; model?: string }
   | { type: 'runCommander';      input: string; model?: string }
-  | { type: 'continueCommander'; nodeId: string; message: string };
+  | { type: 'continueCommander'; nodeId: string; message: string }
+  | { type: 'requestRules' }
+  | { type: 'addRule';           scope: 'global' | 'agent'; agentType?: string; text: string }
+  | { type: 'removeRule';        id: string }
+  | { type: 'toggleRule';        id: string }
+  | { type: 'requestConstitution' }
+  | { type: 'saveConstitution';  content: string }
+  | { type: 'clearConstitution' };
 
 export interface ClaudeJsonResult {
   type: 'result';
