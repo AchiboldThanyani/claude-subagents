@@ -8,6 +8,7 @@ import { ContextManager } from '../context/ContextManager';
 import { ExtToWebMsg, MemoryFile, UsageStats, WebToExtMsg } from '../types';
 import { BUILTIN_AGENTS } from '../orchestrator/builtinAgents';
 import { CONSTITUTION_TEMPLATE } from '../constitution/ConstitutionManager';
+import type { AgentDNA } from '../dna/DNAManager';
 
 export class AgentGraphPanel {
   public static currentPanel: AgentGraphPanel | undefined;
@@ -97,6 +98,9 @@ export class AgentGraphPanel {
         if (this.orchestrator.constitution) {
           const c = this.orchestrator.constitution;
           this.panel.webview.postMessage({ type: 'constitution', content: c.read(), info: c.getInfo() } satisfies ExtToWebMsg);
+        }
+        if (this.orchestrator.dna) {
+          this.panel.webview.postMessage({ type: 'dna', store: this.orchestrator.dna.getStore() } satisfies ExtToWebMsg);
         }
         break;
       }
@@ -291,6 +295,27 @@ export class AgentGraphPanel {
         if (!this.orchestrator.rules) break;
         this.orchestrator.rules.toggle(msg.id);
         this.panel.webview.postMessage({ type: 'rules', store: this.orchestrator.rules.getStore() } satisfies ExtToWebMsg);
+        break;
+      }
+
+      case 'requestDNA': {
+        if (this.orchestrator.dna) {
+          this.panel.webview.postMessage({ type: 'dna', store: this.orchestrator.dna.getStore() } satisfies ExtToWebMsg);
+        }
+        break;
+      }
+
+      case 'setDNA': {
+        if (!this.orchestrator.dna) break;
+        this.orchestrator.dna.setDNA(msg.agentType, msg.dna as AgentDNA);
+        this.panel.webview.postMessage({ type: 'dna', store: this.orchestrator.dna.getStore() } satisfies ExtToWebMsg);
+        break;
+      }
+
+      case 'clearDNA': {
+        if (!this.orchestrator.dna) break;
+        this.orchestrator.dna.clearDNA(msg.agentType);
+        this.panel.webview.postMessage({ type: 'dna', store: this.orchestrator.dna.getStore() } satisfies ExtToWebMsg);
         break;
       }
 

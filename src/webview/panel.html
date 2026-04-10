@@ -424,6 +424,7 @@
       <div class="stab"        id="tab-log"       onclick="switchTab('log')"    title="Log"><span class="ms sm">terminal</span></div>
       <div class="stab"        id="tab-rules"     onclick="switchTab('rules')"  title="Rules"><span class="ms sm">rule</span></div>
       <div class="stab"        id="tab-constitution" onclick="switchTab('constitution')" title="Constitution"><span class="ms sm">gavel</span></div>
+      <div class="stab"        id="tab-dna"          onclick="switchTab('dna')"          title="Agent DNA"><span class="ms sm">biotech</span></div>
     </div>
 
     <div id="sidebar-body">
@@ -679,6 +680,14 @@
             <button onclick="saveConstitution()" style="padding:6px 16px;background:var(--accent);border:none;color:#fff;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600">Save</button>
           </div>
         </div>
+      </div>
+
+      <!-- DNA -->
+      <div id="panel-dna" style="display:none">
+        <div class="tab-header">
+          <span class="tab-header-title"><span class="ms sm">biotech</span> Agent DNA</span>
+        </div>
+        <div id="dna-body" style="padding:8px 12px;display:flex;flex-direction:column;gap:6px"></div>
       </div>
 
     </div>
@@ -1296,7 +1305,7 @@ function toggleSidebar() {
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
-const TABS=['detail','run','create','schedule','memory','usage','history','log','rules','constitution'];
+const TABS=['detail','run','create','schedule','memory','usage','history','log','rules','constitution','dna'];
 function switchTab(name) {
   TABS.forEach(t=>{
     const p = document.getElementById('panel-'+t);
@@ -1308,6 +1317,7 @@ function switchTab(name) {
   if (name==='usage')        vscode.postMessage({type:'requestUsage'});
   if (name==='rules')        vscode.postMessage({type:'requestRules'});
   if (name==='constitution') vscode.postMessage({type:'requestConstitution'});
+  if (name==='dna')          vscode.postMessage({type:'requestDNA'});
 }
 
 // ── Output modal ───────────────────────────────────────────────────────────
@@ -1720,6 +1730,119 @@ function renderUsage(stats) {
   }).join('');
 }
 
+// ── Agent DNA ──────────────────────────────────────────────────────────────
+const DNA_AGENT_LIST = [
+  { type: 'coder',          label: 'Coder' },
+  { type: 'code-review',    label: 'Code Reviewer' },
+  { type: 'bug-finder',     label: 'Bug Finder' },
+  { type: 'test-writer',    label: 'Test Writer' },
+  { type: 'researcher',     label: 'Researcher' },
+  { type: 'docs-writer',    label: 'Docs Writer' },
+  { type: 'refactor',       label: 'Refactor' },
+  { type: 'summarizer',     label: 'Summarizer' },
+  { type: 'git-commit',     label: 'Git Commit' },
+  { type: 'pr-description', label: 'PR Description' },
+  { type: 'planner',        label: 'Planner' },
+  { type: 'commander',      label: 'Commander' },
+];
+
+let dnaStore = {};
+let dnaExpanded = null; // which agentType card is expanded
+
+function renderDNA(store) {
+  dnaStore = store || {};
+  const body = document.getElementById('dna-body');
+
+  body.innerHTML = DNA_AGENT_LIST.map(({ type, label }) => {
+    const dna = dnaStore[type] || {};
+    const hasData = dna.tone || dna.verbosity || dna.focus || dna.persona;
+    const tc = TYPE_COLOR[type] || 'var(--accent2)';
+    const icon = TYPE_ICONS[type] || 'smart_toy';
+    const isOpen = dnaExpanded === type;
+
+    return `<div class="mem-card" id="dna-card-${type}" style="padding:0;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 11px;cursor:pointer" onclick="toggleDNACard('${type}')">
+        <div style="width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:${tc}1a;flex-shrink:0">
+          <span class="ms sm" style="font-size:13px;color:${tc}">${icon}</span>
+        </div>
+        <span style="flex:1;font-size:12px;font-weight:600;color:var(--text)">${esc(label)}</span>
+        ${hasData ? `<span style="font-size:10px;padding:2px 6px;background:${tc}22;color:${tc};border-radius:4px">configured</span>` : ''}
+        ${hasData ? `<button title="Clear DNA" onclick="event.stopPropagation();clearAgentDNA('${type}')" style="background:none;border:none;cursor:pointer;padding:2px"><span class="ms sm" style="font-size:14px;color:var(--err)">delete</span></button>` : ''}
+        <span class="ms sm" style="font-size:14px;color:var(--muted)">${isOpen ? 'expand_less' : 'expand_more'}</span>
+      </div>
+      ${isOpen ? renderDNAForm(type, dna, tc) : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderDNAForm(type, dna, tc) {
+  return `<div style="padding:10px 12px;border-top:1px solid var(--border);background:var(--bg);display:flex;flex-direction:column;gap:10px">
+
+    <div style="display:flex;gap:8px">
+      <div style="flex:1">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Tone</div>
+        <select id="dna-tone-${type}" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 7px;font-size:11px">
+          <option value="">— default —</option>
+          <option value="formal"   ${dna.tone==='formal'   ?'selected':''}>Formal</option>
+          <option value="casual"   ${dna.tone==='casual'   ?'selected':''}>Casual</option>
+          <option value="direct"   ${dna.tone==='direct'   ?'selected':''}>Direct</option>
+          <option value="terse"    ${dna.tone==='terse'    ?'selected':''}>Terse</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Verbosity</div>
+        <select id="dna-verbosity-${type}" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 7px;font-size:11px">
+          <option value="">— default —</option>
+          <option value="concise"  ${dna.verbosity==='concise'  ?'selected':''}>Concise</option>
+          <option value="balanced" ${dna.verbosity==='balanced' ?'selected':''}>Balanced</option>
+          <option value="detailed" ${dna.verbosity==='detailed' ?'selected':''}>Detailed</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Focus <span style="color:var(--border)">(optional — e.g. "security first")</span></div>
+      <input id="dna-focus-${type}" type="text" value="${esc(dna.focus||'')}" placeholder="e.g. security implications first"
+        style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:11px;box-sizing:border-box">
+    </div>
+
+    <div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Persona <span style="color:var(--border)">(freeform instruction)</span></div>
+      <textarea id="dna-persona-${type}" placeholder="e.g. You are a senior TypeScript engineer who values simplicity over cleverness"
+        style="width:100%;min-height:56px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-family:'DM Sans',system-ui;font-size:11px;resize:none;box-sizing:border-box"
+        oninput="autoResize(this)">${esc(dna.persona||'')}</textarea>
+    </div>
+
+    <button onclick="saveAgentDNA('${type}')"
+      style="padding:6px;background:${tc};border:none;color:#1e1e2e;border-radius:7px;cursor:pointer;font-size:11px;font-weight:700">
+      Save DNA
+    </button>
+  </div>`;
+}
+
+function toggleDNACard(type) {
+  dnaExpanded = dnaExpanded === type ? null : type;
+  renderDNA(dnaStore);
+  if (dnaExpanded) {
+    const card = document.getElementById('dna-card-' + type);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function saveAgentDNA(type) {
+  const tone      = document.getElementById('dna-tone-' + type)?.value || undefined;
+  const verbosity = document.getElementById('dna-verbosity-' + type)?.value || undefined;
+  const focus     = document.getElementById('dna-focus-' + type)?.value.trim() || undefined;
+  const persona   = document.getElementById('dna-persona-' + type)?.value.trim() || undefined;
+  vscode.postMessage({ type: 'setDNA', agentType: type, dna: { tone, verbosity, focus, persona } });
+  dnaExpanded = null;
+}
+
+function clearAgentDNA(type) {
+  vscode.postMessage({ type: 'clearDNA', agentType: type });
+  if (dnaExpanded === type) dnaExpanded = null;
+}
+
 // ── Constitution ───────────────────────────────────────────────────────────
 const CONSTITUTION_TEMPLATE = `# Codebase Constitution
 
@@ -1951,6 +2074,9 @@ window.addEventListener('message', e=>{
       break;
     case 'constitution':
       renderConstitution(msg.content, msg.info);
+      break;
+    case 'dna':
+      renderDNA(msg.store);
       break;
   }
 });

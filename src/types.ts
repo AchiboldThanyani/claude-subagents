@@ -108,7 +108,8 @@ export type ExtToWebMsg =
   | { type: 'memory';        files: MemoryFile[] }
   | { type: 'usage';         stats: UsageStats }
   | { type: 'rules';         store: import('./rules/RulesManager').RulesStore }
-  | { type: 'constitution';  content: string; info: import('./constitution/ConstitutionManager').ConstitutionInfo };
+  | { type: 'constitution';  content: string; info: import('./constitution/ConstitutionManager').ConstitutionInfo }
+  | { type: 'dna';           store: import('./dna/DNAManager').DNAStore };
 
 /** Messages sent from WebView → Extension Host */
 export type WebToExtMsg =
@@ -141,7 +142,10 @@ export type WebToExtMsg =
   | { type: 'toggleRule';        id: string }
   | { type: 'requestConstitution' }
   | { type: 'saveConstitution';  content: string }
-  | { type: 'clearConstitution' };
+  | { type: 'clearConstitution' }
+  | { type: 'requestDNA' }
+  | { type: 'setDNA'; agentType: string; dna: import('./dna/DNAManager').AgentDNA }
+  | { type: 'clearDNA'; agentType: string };
 
 export interface ClaudeJsonResult {
   type: 'result';
