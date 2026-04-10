@@ -19,6 +19,7 @@ export type AgentType =
   | 'bug-finder'
   | 'docs-writer'
   | 'refactor'
+  | 'commander'
   | 'custom';
 
 export interface EditorContext {
@@ -129,7 +130,9 @@ export type WebToExtMsg =
   | { type: 'addTemplate';       agentType: AgentType; customAgentId?: string; prompt?: string }
   | { type: 'updateTemplatePrompt'; id: string; prompt: string }
   | { type: 'removeTemplate';    id: string }
-  | { type: 'runPipeline';       useContext?: boolean; model?: string };
+  | { type: 'runPipeline';       useContext?: boolean; model?: string }
+  | { type: 'runCommander';      input: string; model?: string }
+  | { type: 'continueCommander'; nodeId: string; message: string };
 
 export interface ClaudeJsonResult {
   type: 'result';

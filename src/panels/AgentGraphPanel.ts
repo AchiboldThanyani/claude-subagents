@@ -178,6 +178,22 @@ export class AgentGraphPanel {
         break;
       }
 
+      case 'runCommander': {
+        const ctx = ContextManager.capture();
+        this.orchestrator.runCommander(msg.input, ctx, msg.model)
+          .catch((err: Error) => vscode.window.showErrorMessage(`Commander error: ${err.message}`));
+        break;
+      }
+
+      case 'continueCommander': {
+        const { nodeId, message } = msg;
+        if (!message.trim()) return;
+        const ctx = ContextManager.capture();
+        this.orchestrator.continueCommander(nodeId, message, ctx)
+          .catch((err: Error) => vscode.window.showErrorMessage(`Commander error: ${err.message}`));
+        break;
+      }
+
       case 'applyDiff': {
         const node = this.orchestrator.getNodes().find(n => n.id === msg.nodeId);
         if (!node?.output) return;

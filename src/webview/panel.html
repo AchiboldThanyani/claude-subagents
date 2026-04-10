@@ -97,6 +97,13 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .spinner{width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--running);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
   #chain-mode-btn.active{background:rgba(249,226,175,.12);border-color:rgba(249,226,175,.35);color:var(--warn)}
+  #commander-btn.active{background:rgba(249,226,175,.18);border-color:rgba(249,226,175,.6);color:#f9e2af}
+  #commander-overlay.show{display:flex!important}
+  .cmd-msg{padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+  .cmd-msg.user{background:rgba(249,226,175,.08);border:1px solid rgba(249,226,175,.15);color:#f9e2af;align-self:flex-end;max-width:90%}
+  .cmd-msg.assistant{background:var(--bg);border:1px solid var(--border);color:var(--text);align-self:flex-start;max-width:95%}
+  .cmd-msg.live::after{content:'▋';animation:blink 1s step-start infinite;margin-left:2px;color:var(--accent)}
+  @keyframes blink{50%{opacity:0}}
   .ms{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;font-size:18px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;vertical-align:middle}
   .ms.sm{font-size:14px}
   .node-icon{font-family:'Material Symbols Rounded';font-variation-settings:'FILL' 1,'wght' 300,'GRAD' 0,'opsz' 20}
@@ -348,7 +355,34 @@
     <button class="tb-btn tb-btn-ghost" onclick="switchTab('create')"><span class="ms">add</span> New</button>
     <button id="chain-mode-btn" class="tb-btn tb-btn-ghost" onclick="toggleChainMode()" title="Chain mode: click two nodes to pipe output"><span class="ms">cable</span> Chain</button>
     <button id="run-pipeline-btn" class="tb-btn tb-btn-ghost" onclick="runPipelineBtn()" title="Run all templates on the canvas as a pipeline"><span class="ms">rocket_launch</span> Run Pipeline</button>
+    <button id="commander-btn" class="tb-btn tb-btn-ghost" onclick="toggleCommanderOverlay()" title="Commander — natural language agent orchestration" style="border-color:rgba(249,226,175,.35);color:#f9e2af"><span class="ms">military_tech</span> Commander</button>
     <button class="tb-btn tb-btn-ghost" onclick="clearGraph()" title="Clear canvas" style="padding:4px 8px"><span class="ms">delete_sweep</span></button>
+  </div>
+</div>
+
+<!-- Commander overlay -->
+<div id="commander-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:flex-end;justify-content:center;padding-bottom:32px">
+  <div style="width:min(640px,95vw);background:var(--surface);border:1px solid rgba(249,226,175,.35);border-radius:14px;box-shadow:0 0 40px rgba(249,226,175,.12);overflow:hidden">
+    <div style="padding:12px 16px 0;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
+      <span class="ms" style="color:#f9e2af;font-size:18px">military_tech</span>
+      <span style="font-size:13px;font-weight:600;color:#f9e2af">Commander</span>
+      <span style="font-size:11px;color:var(--muted);margin-left:4px">— tell me what to do</span>
+      <button onclick="closeCommanderOverlay()" style="margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;padding:4px"><span class="ms sm">close</span></button>
+    </div>
+    <div id="commander-history" style="max-height:260px;overflow-y:auto;padding:10px 16px;display:flex;flex-direction:column;gap:8px"></div>
+    <div style="padding:10px 12px 12px;position:relative">
+      <textarea id="commander-input" placeholder='e.g. "Review auth.ts then write tests for any bugs found"' style="width:100%;min-height:52px;max-height:140px;background:rgba(249,226,175,.04);border:1px solid rgba(249,226,175,.2);border-radius:8px;padding:9px 44px 9px 12px;color:var(--text);font-family:'DM Sans',system-ui;font-size:13px;resize:none;box-sizing:border-box;outline:none" oninput="autoResize(this)" onkeydown="handleCommanderKey(event)"></textarea>
+      <button onclick="submitCommander()" style="position:absolute;bottom:19px;right:20px;background:#f9e2af;border:none;color:#1e1e2e;border-radius:6px;width:30px;height:30px;cursor:pointer;display:flex;align-items:center;justify-content:center">
+        <span class="ms sm" style="font-size:14px">send</span>
+      </button>
+    </div>
+    <div style="padding:0 16px 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <span style="font-size:10px;color:var(--muted)">Model:</span>
+      <button type="button" class="model-chip active" data-cmd-model="claude-sonnet-4-6" onclick="selectCmdModel(this)">Sonnet 4.6</button>
+      <button type="button" class="model-chip" data-cmd-model="claude-opus-4-6" onclick="selectCmdModel(this)">Opus 4.6</button>
+      <button type="button" class="model-chip" data-cmd-model="claude-haiku-4-5-20251001" onclick="selectCmdModel(this)">Haiku 4.5</button>
+    </div>
+    <div style="padding:0 16px 10px;font-size:10px;color:var(--muted)">Ctrl+Enter to send · Esc to close · Agents spawn on the canvas as Commander works</div>
   </div>
 </div>
 
@@ -613,6 +647,7 @@ const TYPE_ICONS = {
   'bug-finder':   'bug_report',
   'docs-writer':  'menu_book',
   refactor:       'autorenew',
+  commander:      'military_tech',
   custom:         'tune',
 };
 
@@ -624,11 +659,12 @@ const TYPE_COLOR = {
   coder:          '#a6e3a1',
   summarizer:     '#cba6f7',
   'git-commit':   '#f9e2af',
-  'pr-description':'89dceb',
+  'pr-description':'#89dceb',
   'test-writer':  '#94e2d5',
   'bug-finder':   '#f38ba8',
   'docs-writer':  '#b4befe',
   refactor:       '#fab387',
+  commander:      '#f9e2af',
   custom:         '#cdd6f4',
 };
 const STATUS_COLOR = { idle:'#3a3a5c',running:'#89b4fa',done:'#a6e3a1',error:'#f38ba8',cancelled:'#f9e2af' };
@@ -748,6 +784,14 @@ function draw() {
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, nodeRadius+5, a2, a2 + Math.PI*1.1);
       ctx.strokeStyle = 'rgba(94,234,212,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.restore();
+    }
+
+    // Commander: extra gold ring
+    if (node.type === 'commander') {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, nodeRadius + 13, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(249,226,175,0.25)'; ctx.lineWidth = 1; ctx.stroke();
       ctx.restore();
     }
 
@@ -1000,6 +1044,91 @@ function insertInline() {
 function exportMd() {
   if(selectedId) vscode.postMessage({type:'exportMarkdown',nodeId:selectedId});
 }
+
+// ── Commander ──────────────────────────────────────────────────────────────
+let commanderNodeId = null; // active commander node for streaming
+
+function toggleCommanderOverlay() {
+  const overlay = document.getElementById('commander-overlay');
+  const btn = document.getElementById('commander-btn');
+  const isOpen = overlay.classList.toggle('show');
+  btn.classList.toggle('active', isOpen);
+  if (isOpen) setTimeout(() => document.getElementById('commander-input')?.focus(), 50);
+}
+
+function closeCommanderOverlay() {
+  document.getElementById('commander-overlay').classList.remove('show');
+  document.getElementById('commander-btn').classList.remove('active');
+}
+
+function handleCommanderKey(e) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submitCommander(); }
+  if (e.key === 'Escape') closeCommanderOverlay();
+}
+
+function appendCommanderMsg(role, text, live) {
+  const hist = document.getElementById('commander-history');
+  const div = document.createElement('div');
+  div.className = `cmd-msg ${role}${live ? ' live' : ''}`;
+  div.id = live ? 'commander-live' : '';
+  div.textContent = text;
+  hist.appendChild(div);
+  hist.scrollTop = hist.scrollHeight;
+  return div;
+}
+
+function selectCmdModel(el) {
+  document.querySelectorAll('[data-cmd-model]').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+function getCmdModel() {
+  return document.querySelector('[data-cmd-model].active')?.dataset.cmdModel || 'claude-sonnet-4-6';
+}
+
+function submitCommander() {
+  const input = document.getElementById('commander-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = ''; input.style.height = '';
+  appendCommanderMsg('user', text, false);
+  const liveDiv = appendCommanderMsg('assistant', '', true);
+  liveDiv.id = 'commander-live';
+
+  // Continue existing Commander conversation if one is active and done
+  const existingNode = commanderNodeId ? nodes.get(commanderNodeId) : null;
+  if (existingNode && existingNode.type === 'commander' && existingNode.status !== 'running') {
+    vscode.postMessage({ type: 'continueCommander', nodeId: commanderNodeId, message: text });
+  } else {
+    // New conversation
+    commanderNodeId = null;
+    vscode.postMessage({ type: 'runCommander', input: text, model: getCmdModel() });
+  }
+}
+
+// Listen for Commander node stream updates and reflect in overlay
+function updateCommanderOverlay(node) {
+  if (node.type !== 'commander') return;
+  commanderNodeId = node.id;
+  const liveDiv = document.getElementById('commander-live');
+  if (liveDiv) {
+    if (node.streamBuffer) {
+      liveDiv.textContent = node.streamBuffer;
+      document.getElementById('commander-history').scrollTop = 99999;
+    }
+    if (node.status === 'done' || node.status === 'error') {
+      liveDiv.classList.remove('live');
+      liveDiv.id = '';
+      // Strip the ```actions block from displayed text
+      liveDiv.textContent = (node.output || '').replace(/```actions[\s\S]*?```/g, '').trim();
+    }
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('commander-overlay').classList.contains('show')) {
+    closeCommanderOverlay();
+  }
+});
 
 let tplDebounce = null;
 function updateTemplatePrompt(id, value) {
@@ -1516,14 +1645,16 @@ window.addEventListener('message', e=>{
     case 'addNode':
       nodes.set(msg.node.id,msg.node);
       getOrCreatePos(msg.node.id);
-      // Auto-select new node and switch to detail tab
-      selectedId = msg.node.id;
-      switchTab('detail');
-      renderDetail();
+      if (msg.node.type !== 'commander') {
+        // Auto-select non-commander nodes and switch to detail tab
+        selectedId = msg.node.id;
+        switchTab('detail');
+        renderDetail();
+      }
       break;
     case 'updateNode': {
       const n=nodes.get(msg.id);
-      if(n){ Object.assign(n,msg.patch); if(selectedId===msg.id) renderDetail(); }
+      if(n){ Object.assign(n,msg.patch); if(selectedId===msg.id) renderDetail(); updateCommanderOverlay(n); }
       break;
     }
     case 'removeNode': {

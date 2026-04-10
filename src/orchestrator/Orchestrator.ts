@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { AgentConfig, AgentNode, AgentType, EditorContext, ExtToWebMsg } from '../types';
 import { runAgent } from './AgentRunner';
-import { BUILTIN_AGENTS, PLANNER_AGENT } from './builtinAgents';
+import { BUILTIN_AGENTS, PLANNER_AGENT, COMMANDER_AGENT } from './builtinAgents';
 import { ContextManager } from '../context/ContextManager';
 import { HistoryManager } from '../history/HistoryManager';
 
@@ -96,6 +96,178 @@ export class Orchestrator extends EventEmitter {
     this.activeCount = 0;
     this.emit('message', { type: 'clear' } satisfies ExtToWebMsg);
     this.emitActiveCount();
+  }
+
+  // ── Commander API ─────────────────────────────────────────────────────────
+
+  async runCommander(input: string, ctx?: EditorContext, model?: string): Promise<AgentNode> {
+    const config: AgentConfig = { ...COMMANDER_AGENT, id: makeId(), ...(model ? { model } : {}) };
+    const node = this.createNode(config, input, undefined, ctx);
+    this.updateNode(node.id, { status: 'running', startTime: Date.now() });
+
+    const ctrl = new AbortController();
+    this.abortControllers.set(node.id, ctrl);
+    this.bumpActive(1);
+
+    const contextBlock = ctx ? ContextManager.buildContextBlock(ctx) : '';
+    let streamAccum = '';
+
+    const result = await runAgent(config, contextBlock + input, {
+      signal: ctrl.signal,
+      sessionId: node.sessionId,
+      onStream: (chunk) => {
+        streamAccum += chunk;
+        this.updateNode(node.id, { streamBuffer: streamAccum });
+      },
+    });
+
+    this.abortControllers.delete(node.id);
+    this.bumpActive(-1);
+
+    const completedNode = this.nodes.get(node.id)!;
+    completedNode.messages.push({ role: 'assistant', text: result.output, timestamp: Date.now() });
+
+    this.updateNode(node.id, {
+      status: result.success ? 'done' : 'error',
+      output: result.output,
+      error: result.error,
+      streamBuffer: undefined,
+      endTime: Date.now(),
+      turns: completedNode.turns + 1,
+      messages: completedNode.messages,
+    });
+
+    // Parse and execute actions from Commander's response
+    if (result.success && result.output) {
+      await this.executeCommanderActions(result.output, node.id, ctx);
+    }
+
+    this.history.add({
+      agentName: config.name,
+      agentType: config.type,
+      input,
+      output: result.output,
+      timestamp: Date.now(),
+      durationMs: result.durationMs,
+      success: result.success,
+    });
+
+    return this.nodes.get(node.id)!;
+  }
+
+  async continueCommander(nodeId: string, message: string, ctx?: EditorContext): Promise<void> {
+    const node = this.nodes.get(nodeId);
+    if (!node) throw new Error(`Node ${nodeId} not found`);
+    if (!node.sessionId) throw new Error(`Node has no session ID`);
+    if (node.status === 'running') throw new Error(`Commander is already running`);
+
+    node.messages.push({ role: 'user', text: message, timestamp: Date.now() });
+    this.updateNode(nodeId, { status: 'running', startTime: Date.now(), streamBuffer: '', messages: node.messages });
+
+    const ctrl = new AbortController();
+    this.abortControllers.set(nodeId, ctrl);
+    this.bumpActive(1);
+
+    const contextBlock = ctx ? ContextManager.buildContextBlock(ctx) : '';
+    let streamAccum = '';
+
+    const result = await runAgent(node, contextBlock + message, {
+      signal: ctrl.signal,
+      resume: node.sessionId,
+      onStream: (chunk) => {
+        streamAccum += chunk;
+        this.updateNode(nodeId, { streamBuffer: streamAccum });
+      },
+    });
+
+    this.abortControllers.delete(nodeId);
+    this.bumpActive(-1);
+
+    const updatedNode = this.nodes.get(nodeId)!;
+    updatedNode.messages.push({ role: 'assistant', text: result.output, timestamp: Date.now() });
+
+    this.updateNode(nodeId, {
+      status: result.success ? 'done' : 'error',
+      output: result.output,
+      error: result.error,
+      streamBuffer: undefined,
+      endTime: Date.now(),
+      turns: updatedNode.turns + 1,
+      messages: updatedNode.messages,
+    });
+
+    if (result.success && result.output) {
+      await this.executeCommanderActions(result.output, nodeId, ctx);
+    }
+  }
+
+  private async executeCommanderActions(output: string, commanderNodeId: string, ctx?: EditorContext): Promise<void> {
+    // Extract JSON actions block from Commander's response
+    const match = output.match(/```actions\s*([\s\S]*?)```/);
+    if (!match) return;
+
+    let actions: Array<{
+      action: string;
+      type?: AgentType;
+      input?: string;
+      useContext?: boolean;
+      dependsOnPrevious?: boolean;
+      cron?: string;
+      id?: string;
+      text?: string;
+    }>;
+
+    try {
+      actions = JSON.parse(match[1].trim());
+    } catch {
+      this.log('Commander: failed to parse actions block', 'warn');
+      return;
+    }
+
+    let lastNodeId: string | undefined;
+
+    for (const action of actions) {
+      if (action.action === 'run' && action.type) {
+        // If dependsOnPrevious, wait for the last node to finish first
+        if (action.dependsOnPrevious && lastNodeId) {
+          await this.waitForNode(lastNodeId);
+        }
+        const agentCtx = action.useContext ? ctx : undefined;
+        const template = BUILTIN_AGENTS.find(a => a.type === action.type) ??
+          this.customAgents.find(a => a.type === action.type);
+        if (!template) { this.log(`Commander: unknown agent type "${action.type}"`, 'warn'); continue; }
+        const config: AgentConfig = { ...template, id: makeId() };
+        const childNode = this.createNode(config, action.input ?? '', commanderNodeId, agentCtx);
+        // Don't await — let it run, UI shows progress live
+        this.runNodeAgent(childNode, action.input ?? '', agentCtx)
+          .catch(err => this.log(`Commander child error: ${err.message}`, 'error'));
+        lastNodeId = childNode.id;
+
+      } else if (action.action === 'schedule' && action.type && action.cron) {
+        this.scheduleAgent(action.type, action.cron, action.input ?? '');
+        this.log(`Commander scheduled "${action.type}" (${action.cron})`, 'info');
+
+      } else if (action.action === 'cancel' && action.id) {
+        this.cancelAgent(action.id);
+
+      } else if (action.action === 'answer') {
+        // Pure reply — no agents to spawn, nothing to do
+      }
+    }
+  }
+
+  private waitForNode(nodeId: string): Promise<void> {
+    return new Promise(resolve => {
+      const check = () => {
+        const n = this.nodes.get(nodeId);
+        if (!n || n.status === 'done' || n.status === 'error' || n.status === 'cancelled') {
+          resolve();
+        } else {
+          setTimeout(check, 500);
+        }
+      };
+      check();
+    });
   }
 
   // ── Template / Pipeline API ────────────────────────────────────────────────
