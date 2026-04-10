@@ -422,6 +422,7 @@
       <div class="stab"        id="tab-usage"     onclick="switchTab('usage')"  title="Usage"><span class="ms sm">insights</span></div>
       <div class="stab"        id="tab-history"   onclick="switchTab('history')" title="History"><span class="ms sm">history</span></div>
       <div class="stab"        id="tab-log"       onclick="switchTab('log')"    title="Log"><span class="ms sm">terminal</span></div>
+      <div class="stab"        id="tab-rules"     onclick="switchTab('rules')"  title="Rules"><span class="ms sm">rule</span></div>
     </div>
 
     <div id="sidebar-body">
@@ -601,6 +602,43 @@
           <button class="sm secondary" onclick="document.getElementById('log-area').innerHTML=''"><span class="ms sm">delete_sweep</span></button>
         </div>
         <div id="log-area"></div>
+      </div>
+
+      <!-- RULES -->
+      <div id="panel-rules" style="display:none">
+        <div class="tab-header">
+          <span class="tab-header-title"><span class="ms sm">rule</span> Rules</span>
+          <button class="sm secondary" onclick="showAddRuleForm()" title="Add rule"><span class="ms sm">add</span></button>
+        </div>
+
+        <!-- Add rule form (hidden by default) -->
+        <div id="rule-form" style="display:none;padding:10px 12px;background:var(--bg);border-bottom:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">New rule</div>
+          <textarea id="rule-text-input" placeholder="e.g. Always write tests before marking done" style="width:100%;min-height:48px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 9px;color:var(--text);font-family:'DM Sans',system-ui;font-size:12px;resize:none;box-sizing:border-box" oninput="autoResize(this)"></textarea>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:7px">
+            <span style="font-size:11px;color:var(--muted)">Apply to:</span>
+            <select id="rule-scope-select" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 7px;font-size:11px">
+              <option value="global">All agents (Global)</option>
+              <option value="agent-code-review">Code Reviewer</option>
+              <option value="agent-coder">Coder</option>
+              <option value="agent-bug-finder">Bug Finder</option>
+              <option value="agent-test-writer">Test Writer</option>
+              <option value="agent-researcher">Researcher</option>
+              <option value="agent-docs-writer">Docs Writer</option>
+              <option value="agent-refactor">Refactor</option>
+              <option value="agent-summarizer">Summarizer</option>
+              <option value="agent-git-commit">Git Commit</option>
+              <option value="agent-pr-description">PR Description</option>
+              <option value="agent-commander">Commander</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button onclick="cancelAddRule()" style="flex:1;padding:5px;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-size:11px">Cancel</button>
+            <button onclick="submitAddRule()" style="flex:2;padding:5px;background:var(--accent);border:none;color:#fff;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">Save Rule</button>
+          </div>
+        </div>
+
+        <div id="rules-body" style="padding:8px 12px;display:flex;flex-direction:column;gap:14px"></div>
       </div>
 
     </div>
@@ -1218,7 +1256,7 @@ function toggleSidebar() {
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
-const TABS=['detail','run','create','schedule','memory','usage','history','log'];
+const TABS=['detail','run','create','schedule','memory','usage','history','log','rules'];
 function switchTab(name) {
   TABS.forEach(t=>{
     document.getElementById('panel-'+t).style.display=t===name?'block':'none';
@@ -1226,6 +1264,7 @@ function switchTab(name) {
   });
   if (name==='memory') vscode.postMessage({type:'requestMemory'});
   if (name==='usage')  vscode.postMessage({type:'requestUsage'});
+  if (name==='rules')  vscode.postMessage({type:'requestRules'});
 }
 
 // ── Output modal ───────────────────────────────────────────────────────────
@@ -1638,6 +1677,100 @@ function renderUsage(stats) {
   }).join('');
 }
 
+// ── Rules render ───────────────────────────────────────────────────────────
+function renderRules(store) {
+  const body = document.getElementById('rules-body');
+  if (!store) { body.innerHTML = ''; return; }
+
+  const allEmpty = store.global.length === 0 && Object.keys(store.perAgent).length === 0;
+  if (allEmpty) {
+    body.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--muted)"><span class="ms" style="font-size:32px;color:var(--border)">rule</span><p style="margin-top:8px;font-size:11px">No rules yet — click + to add one</p></div>`;
+    return;
+  }
+
+  function ruleCard(rule, scope, agentType) {
+    const dim = rule.enabled ? '' : 'opacity:0.45;';
+    return `<div class="mem-card" style="${dim}display:flex;align-items:flex-start;gap:8px;padding:8px 10px">
+      <div style="flex:1;font-size:12px;line-height:1.5;color:var(--text)">${esc(rule.text)}</div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button title="${rule.enabled ? 'Disable' : 'Enable'}" onclick="vscode.postMessage({type:'toggleRule',id:${JSON.stringify(rule.id)}})" style="background:none;border:none;cursor:pointer;padding:2px">
+          <span class="ms sm" style="font-size:15px;color:${rule.enabled ? 'var(--ok)' : 'var(--muted)'}">${rule.enabled ? 'toggle_on' : 'toggle_off'}</span>
+        </button>
+        <button title="Remove" onclick="vscode.postMessage({type:'removeRule',id:${JSON.stringify(rule.id)}})" style="background:none;border:none;cursor:pointer;padding:2px">
+          <span class="ms sm" style="font-size:15px;color:var(--err)">delete</span>
+        </button>
+      </div>
+    </div>`;
+  }
+
+  let html = '';
+
+  if (store.global.length > 0) {
+    html += `<div>
+      <div class="mem-group-header">
+        <div style="width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;background:var(--accent)1a;flex-shrink:0">
+          <span class="ms sm" style="font-size:13px;color:var(--accent)">public</span>
+        </div>
+        <span class="mem-group-label" style="color:var(--accent)">Global</span>
+        <span class="mem-count-pill">${store.global.length}</span>
+      </div>
+      ${store.global.map(r => ruleCard(r, 'global', null)).join('')}
+    </div>`;
+  }
+
+  const agentLabels = {
+    'code-review':'Code Reviewer','coder':'Coder','bug-finder':'Bug Finder',
+    'test-writer':'Test Writer','researcher':'Researcher','docs-writer':'Docs Writer',
+    'refactor':'Refactor','summarizer':'Summarizer','git-commit':'Git Commit',
+    'pr-description':'PR Description','commander':'Commander','planner':'Planner'
+  };
+
+  for (const [agentType, rules] of Object.entries(store.perAgent)) {
+    if (!rules || rules.length === 0) continue;
+    const label = agentLabels[agentType] || agentType;
+    const tc = TYPE_COLOR[agentType] || 'var(--accent2)';
+    html += `<div>
+      <div class="mem-group-header">
+        <div style="width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;background:${tc}1a;flex-shrink:0">
+          <span class="ms sm" style="font-size:13px;color:${tc}">${TYPE_ICONS[agentType] || 'smart_toy'}</span>
+        </div>
+        <span class="mem-group-label" style="color:${tc}">${esc(label)}</span>
+        <span class="mem-count-pill">${rules.length}</span>
+      </div>
+      ${rules.map(r => ruleCard(r, 'agent', agentType)).join('')}
+    </div>`;
+  }
+
+  body.innerHTML = html;
+}
+
+function showAddRuleForm() {
+  const form = document.getElementById('rule-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  if (form.style.display === 'block') {
+    document.getElementById('rule-text-input').value = '';
+    document.getElementById('rule-text-input').focus();
+  }
+}
+
+function cancelAddRule() {
+  document.getElementById('rule-form').style.display = 'none';
+  document.getElementById('rule-text-input').value = '';
+}
+
+function submitAddRule() {
+  const text = document.getElementById('rule-text-input').value.trim();
+  if (!text) return;
+  const scopeVal = document.getElementById('rule-scope-select').value;
+  if (scopeVal === 'global') {
+    vscode.postMessage({ type: 'addRule', scope: 'global', text });
+  } else {
+    const agentType = scopeVal.replace(/^agent-/, '');
+    vscode.postMessage({ type: 'addRule', scope: 'agent', agentType, text });
+  }
+  cancelAddRule();
+}
+
 // ── Message handler ────────────────────────────────────────────────────────
 window.addEventListener('message', e=>{
   const msg=e.data;
@@ -1689,6 +1822,9 @@ window.addEventListener('message', e=>{
       break;
     case 'usage':
       renderUsage(msg.stats);
+      break;
+    case 'rules':
+      renderRules(msg.store);
       break;
   }
 });
