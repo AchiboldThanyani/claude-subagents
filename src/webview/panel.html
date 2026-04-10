@@ -347,6 +347,7 @@
     <button class="tb-btn tb-btn-primary" onclick="switchTab('run')"><span class="ms">play_arrow</span> Run</button>
     <button class="tb-btn tb-btn-ghost" onclick="switchTab('create')"><span class="ms">add</span> New</button>
     <button id="chain-mode-btn" class="tb-btn tb-btn-ghost" onclick="toggleChainMode()" title="Chain mode: click two nodes to pipe output"><span class="ms">cable</span> Chain</button>
+    <button id="run-pipeline-btn" class="tb-btn tb-btn-ghost" onclick="runPipelineBtn()" title="Run all templates on the canvas as a pipeline"><span class="ms">rocket_launch</span> Run Pipeline</button>
     <button class="tb-btn tb-btn-ghost" onclick="clearGraph()" title="Clear canvas" style="padding:4px 8px"><span class="ms">delete_sweep</span></button>
   </div>
 </div>
@@ -439,10 +440,15 @@
           <label class="checkbox-row" style="margin:0"><input type="checkbox" id="run-use-context" checked> <span class="ms sm" style="color:var(--accent2)">attach_file</span> Include current file context</label>
         </div>
         <div id="run-ctx-info" style="font-size:10px;color:var(--accent2);margin-top:4px"></div>
-        <button id="run-btn" style="width:100%;margin-top:10px;padding:7px" onclick="submitRun()">
-          <span class="run-btn-icon"><span class="ms sm">play_arrow</span> Run Agent</span>
-          <span class="run-btn-spinner spinner"></span>
-        </button>
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <button onclick="addTemplateFromRun()" style="flex:1;padding:7px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;gap:5px" title="Add this agent to the canvas as a template (doesn't run yet)">
+            <span class="ms sm">add_circle</span> Add to canvas
+          </button>
+          <button id="run-btn" style="flex:1;padding:7px" onclick="submitRun()">
+            <span class="run-btn-icon"><span class="ms sm">play_arrow</span> Run now</span>
+            <span class="run-btn-spinner spinner"></span>
+          </button>
+        </div>
       </div>
 
       <!-- CREATE -->
@@ -713,9 +719,19 @@ function draw() {
       ctx.save(); ctx.shadowBlur=16; ctx.shadowColor=isChainSrc?'#f9e2af':'#7c6af7';
     }
     ctx.beginPath(); ctx.arc(pos.x,pos.y,nodeRadius,0,Math.PI*2);
-    ctx.fillStyle=sb; ctx.fill();
-    ctx.strokeStyle=isChainSrc?'#f9e2af':isSel?'#7c6af7':sc;
-    ctx.lineWidth=isSel||isChainSrc?2.5:1.5; ctx.stroke();
+    ctx.fillStyle = node.isTemplate ? 'rgba(124,106,247,0.06)' : sb;
+    ctx.fill();
+    if (node.isTemplate) {
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = isChainSrc ? '#f9e2af' : isSel ? '#7c6af7' : '#555870';
+      ctx.lineWidth = isSel || isChainSrc ? 2.5 : 1.5;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.strokeStyle=isChainSrc?'#f9e2af':isSel?'#7c6af7':sc;
+      ctx.lineWidth=isSel||isChainSrc?2.5:1.5; ctx.stroke();
+    }
     if (isSel||isChainSrc) ctx.restore();
 
     // ── Dual counter-rotating rings when running ─────────────────────────
@@ -746,12 +762,14 @@ function draw() {
     const lbl=node.name.length>14?node.name.slice(0,13)+'…':node.name;
     ctx.fillText(lbl, pos.x, pos.y+nodeRadius+3);
 
-    // Status dot — pulses when running
-    const dotPulse = node.status==='running' ? 0.55 + 0.45*Math.sin(Date.now()/280) : 1;
-    ctx.globalAlpha = dotPulse;
-    ctx.beginPath(); ctx.arc(pos.x+nodeRadius-6,pos.y-nodeRadius+6,4,0,Math.PI*2);
-    ctx.fillStyle=sc; ctx.fill();
-    ctx.globalAlpha = 1;
+    // Status dot — pulses when running, hidden on templates
+    if (!node.isTemplate) {
+      const dotPulse = node.status==='running' ? 0.55 + 0.45*Math.sin(Date.now()/280) : 1;
+      ctx.globalAlpha = dotPulse;
+      ctx.beginPath(); ctx.arc(pos.x+nodeRadius-6,pos.y-nodeRadius+6,4,0,Math.PI*2);
+      ctx.fillStyle=sc; ctx.fill();
+      ctx.globalAlpha = 1;
+    }
   }
   ctx.restore();
 }
@@ -831,6 +849,49 @@ function renderDetail() {
   }
   const node = nodes.get(selectedId);
   noSel.style.display = 'none'; detail.style.display = 'block';
+
+  // ── Template editor view ─────────────────────────────────────────────────
+  if (node.isTemplate) {
+    const typeColor = TYPE_COLOR[node.type] || 'var(--text)';
+    const upstreamCount = edges.filter(e => e.to === node.id).length;
+    const downstreamCount = edges.filter(e => e.from === node.id).length;
+    detail.innerHTML = `
+      <div class="detail-hero">
+        <div class="detail-hero-top">
+          <div class="detail-hero-icon" style="background:rgba(124,106,247,.08);border:1.5px dashed var(--muted)">
+            <span class="ms" style="color:${typeColor};font-size:20px">${TYPE_ICONS[node.type] || 'tune'}</span>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="detail-hero-name">${esc(node.name)}</div>
+            <div class="detail-hero-type">${node.type.replace(/-/g, ' ')} · template</div>
+          </div>
+          <span class="status-pill idle">template</span>
+        </div>
+        <div class="detail-chips">
+          <span class="detail-chip"><span class="ms sm" style="font-size:11px">arrow_downward</span>${upstreamCount} in</span>
+          <span class="detail-chip"><span class="ms sm" style="font-size:11px">arrow_upward</span>${downstreamCount} out</span>
+        </div>
+      </div>
+      <div style="padding:0 12px 12px">
+        <label style="display:block;font-size:10px;color:var(--muted);margin:10px 0 5px;text-transform:uppercase;letter-spacing:.5px">Prompt</label>
+        <textarea id="tpl-prompt-${node.id}" style="width:100%;min-height:80px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-family:'DM Sans',system-ui;font-size:12px;resize:vertical" oninput="updateTemplatePrompt('${node.id}',this.value)" placeholder="What should this agent do?">${esc(node.input || '')}</textarea>
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <button onclick="removeTemplate('${node.id}')" style="flex:1;padding:7px;background:rgba(243,139,168,.08);border:1px solid rgba(243,139,168,.28);color:var(--err);border-radius:7px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;gap:5px">
+            <span class="ms sm">delete</span> Remove
+          </button>
+          <button onclick="vscode.postMessage({type:'runPipeline',useContext:true,model:getSelectedModel()})" style="flex:2;padding:7px;background:var(--accent);border:none;color:#fff;border-radius:7px;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:5px">
+            <span class="ms sm">play_arrow</span> Run Pipeline
+          </button>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">
+          ${upstreamCount > 0 ? `This template receives output from ${upstreamCount} upstream step${upstreamCount !== 1 ? 's' : ''}. ` : 'No upstream — this is a root step. '}
+          Use <strong>Chain mode</strong> on the topbar to wire templates together.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
 
   const dur = node.endTime && node.startTime
     ? ((node.endTime - node.startTime) / 1000).toFixed(1) + 's'
@@ -938,6 +999,33 @@ function insertInline() {
 }
 function exportMd() {
   if(selectedId) vscode.postMessage({type:'exportMarkdown',nodeId:selectedId});
+}
+
+let tplDebounce = null;
+function updateTemplatePrompt(id, value) {
+  if (tplDebounce) clearTimeout(tplDebounce);
+  const n = nodes.get(id); if (n) n.input = value;
+  tplDebounce = setTimeout(() => {
+    vscode.postMessage({ type: 'updateTemplatePrompt', id, prompt: value });
+  }, 350);
+}
+function removeTemplate(id) {
+  vscode.postMessage({ type: 'removeTemplate', id });
+}
+function addTemplateFromRun() {
+  const type = selectedRunAgent;
+  if (type === '__custom__') {
+    const agentId = document.getElementById('run-custom-select').value;
+    vscode.postMessage({ type: 'addTemplate', agentType: 'custom', customAgentId: agentId });
+  } else {
+    const prompt = document.getElementById('run-input').value.trim() || undefined;
+    vscode.postMessage({ type: 'addTemplate', agentType: type, prompt });
+  }
+}
+function runPipelineBtn() {
+  const model = getSelectedModel();
+  const useContext = document.getElementById('run-use-context')?.checked ?? true;
+  vscode.postMessage({ type: 'runPipeline', useContext, model });
 }
 
 function sendContinue(nodeId) {
@@ -1436,6 +1524,15 @@ window.addEventListener('message', e=>{
     case 'updateNode': {
       const n=nodes.get(msg.id);
       if(n){ Object.assign(n,msg.patch); if(selectedId===msg.id) renderDetail(); }
+      break;
+    }
+    case 'removeNode': {
+      nodes.delete(msg.id);
+      layout.delete(msg.id);
+      for (let i = edges.length - 1; i >= 0; i--) {
+        if (edges[i].from === msg.id || edges[i].to === msg.id) edges.splice(i, 1);
+      }
+      if (selectedId === msg.id) { selectedId = null; renderDetail(); }
       break;
     }
     case 'addEdge':

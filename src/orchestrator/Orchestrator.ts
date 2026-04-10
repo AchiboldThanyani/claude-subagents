@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { AgentConfig, AgentNode, AgentType, EditorContext, ExtToWebMsg } from '../types';
 import { runAgent } from './AgentRunner';
 import { BUILTIN_AGENTS, PLANNER_AGENT } from './builtinAgents';
@@ -45,6 +46,7 @@ export class Orchestrator extends EventEmitter {
   private scheduledJobs = new Map<string, ReturnType<typeof setInterval>>();
   private activeCount = 0;
   private customAgentsFile: string | undefined;
+  private pipelineEdges: Array<{ from: string; to: string }> = [];
   history: HistoryManager;
 
   constructor(historyManager: HistoryManager, storageDir?: string) {
@@ -90,9 +92,168 @@ export class Orchestrator extends EventEmitter {
     for (const [, ctrl] of this.abortControllers) ctrl.abort();
     this.abortControllers.clear();
     this.nodes.clear();
+    this.pipelineEdges = [];
     this.activeCount = 0;
     this.emit('message', { type: 'clear' } satisfies ExtToWebMsg);
     this.emitActiveCount();
+  }
+
+  // ── Template / Pipeline API ────────────────────────────────────────────────
+
+  addTemplate(agentType: AgentType, customAgentId?: string, prompt?: string, ctx?: EditorContext): AgentNode {
+    const template =
+      BUILTIN_AGENTS.find(a => a.type === agentType) ??
+      this.customAgents.find(a => a.id === customAgentId) ??
+      this.customAgents.find(a => a.type === agentType);
+    if (!template) throw new Error(`No agent found for type "${agentType}"`);
+
+    const config: AgentConfig = { ...template, id: makeId() };
+    const node: AgentNode = {
+      ...config,
+      status: 'idle',
+      input: prompt ?? this.defaultPromptFor(agentType, ctx),
+      children: [],
+      context: ctx,
+      turns: 0,
+      messages: [],
+      isTemplate: true,
+      customAgentId,
+    };
+    this.nodes.set(node.id, node);
+    this.emit('message', { type: 'addNode', node } satisfies ExtToWebMsg);
+    return node;
+  }
+
+  updateTemplatePrompt(id: string, prompt: string): void {
+    const node = this.nodes.get(id);
+    if (!node || !node.isTemplate) return;
+    node.input = prompt;
+    this.emit('message', { type: 'updateNode', id, patch: { input: prompt } } satisfies ExtToWebMsg);
+  }
+
+  removeTemplate(id: string): void {
+    const node = this.nodes.get(id);
+    if (!node || !node.isTemplate) return;
+    this.nodes.delete(id);
+    this.pipelineEdges = this.pipelineEdges.filter(e => e.from !== id && e.to !== id);
+    this.emit('message', { type: 'removeNode', id } satisfies ExtToWebMsg);
+  }
+
+  addPipelineEdge(from: string, to: string): boolean {
+    if (from === to) return false;
+    if (this.pipelineEdges.find(e => e.from === from && e.to === to)) return false;
+    // Prevent cycles: reject if `from` is reachable from `to`
+    const visited = new Set<string>();
+    const stack = [to];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      if (cur === from) return false;
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      for (const e of this.pipelineEdges) if (e.from === cur) stack.push(e.to);
+    }
+    this.pipelineEdges.push({ from, to });
+    this.emit('message', { type: 'addEdge', from, to } satisfies ExtToWebMsg);
+    return true;
+  }
+
+  getPipelineEdges(): Array<{ from: string; to: string }> {
+    return [...this.pipelineEdges];
+  }
+
+  async runPipeline(ctx?: EditorContext, model?: string): Promise<void> {
+    const templates = [...this.nodes.values()].filter(n => n.isTemplate);
+    if (templates.length === 0) {
+      this.log('Pipeline is empty — add agents to the canvas first', 'warn');
+      return;
+    }
+
+    // Convert templates → task map, preserving their ids
+    const tasks = templates.map(t => ({
+      id: t.id,
+      templateNodeId: t.id,
+      name: t.name,
+      type: t.type,
+      systemPrompt: t.systemPrompt,
+      powers: t.powers,
+      prompt: t.input ?? '',
+      dependsOn: this.pipelineEdges.filter(e => e.to === t.id).map(e => e.from),
+    }));
+
+    const completed = new Set<string>();
+    const results = new Map<string, string>();
+    const remaining = new Set(tasks.map(t => t.id));
+
+    this.log(`Pipeline starting: ${tasks.length} templates`, 'info');
+
+    while (remaining.size > 0) {
+      const ready = tasks.filter(t => remaining.has(t.id) && t.dependsOn.every(d => completed.has(d)));
+      if (ready.length === 0) {
+        this.log('Pipeline deadlock — check for cycles', 'warn');
+        break;
+      }
+
+      await Promise.all(ready.map(async (task) => {
+        remaining.delete(task.id);
+        const node = this.nodes.get(task.templateNodeId)!;
+
+        let prompt = task.prompt;
+        if (task.dependsOn.length > 0) {
+          // Write upstream results to a temp file so the prompt stays short
+          // and doesn't trigger PTY paste-mode issues
+          const upstreamParts = task.dependsOn.map(d => {
+            const up = tasks.find(t => t.id === d);
+            return `## From "${up?.name ?? d}"\n${results.get(d) ?? '(no output)'}`;
+          });
+          const tmpFile = path.join(os.tmpdir(), `pipeline-ctx-${task.id}.md`);
+          fs.writeFileSync(tmpFile, upstreamParts.join('\n\n---\n\n'), 'utf8');
+          prompt = `${task.prompt}\n\nIMPORTANT: Read the file "${tmpFile}" — it contains the output from the previous pipeline step(s) that you should use as context.`;
+        }
+
+        // Promote template → live node and sync to webview
+        node.isTemplate = false;
+        node.sessionId = makeSessionId();
+        node.messages = [{ role: 'user', text: prompt, timestamp: Date.now() }];
+        node.input = prompt;
+        this.updateNode(node.id, {
+          isTemplate: false,
+          sessionId: node.sessionId,
+          messages: node.messages,
+          input: prompt,
+        });
+
+        const cfg: AgentConfig = {
+          id: node.id,
+          name: node.name,
+          type: node.type,
+          systemPrompt: node.systemPrompt,
+          powers: node.powers,
+          ...(model ? { model } : node.model ? { model: node.model } : {}),
+        };
+        const result = await this.runNodeAgent({ ...node, ...cfg } as AgentNode, prompt, ctx);
+        results.set(task.id, result.output ?? '');
+        completed.add(task.id);
+      }));
+    }
+
+    this.log(`Pipeline finished: ${completed.size}/${tasks.length} tasks complete`, 'info');
+  }
+
+  private defaultPromptFor(type: AgentType, ctx?: EditorContext): string {
+    const file = ctx?.fileName ?? 'the current file';
+    switch (type) {
+      case 'code-review':   return `Review the code in ${file}`;
+      case 'test-writer':   return `Write tests for ${file}`;
+      case 'docs-writer':   return `Write documentation for ${file}`;
+      case 'bug-finder':    return `Find bugs in ${file}`;
+      case 'refactor':      return `Refactor ${file}`;
+      case 'git-commit':    return `Write a git commit message for staged changes`;
+      case 'pr-description': return `Write a PR description for the current branch`;
+      case 'summarizer':    return `Summarize the outputs from previous steps`;
+      case 'researcher':    return `Research the topic`;
+      case 'coder':         return `Implement the task`;
+      default:              return `Run ${type} on ${file}`;
+    }
   }
 
   cancelAgent(id: string): void {

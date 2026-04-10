@@ -75,16 +75,9 @@ export class ContextManager {
 
     if (ctx.selection) {
       parts.push(`## Selected Code\n\`\`\`${ctx.language ?? ''}\n${ctx.selection}\n\`\`\``);
-    } else if (ctx.fullContent) {
-      parts.push(`## File Contents: ${ctx.fileName}\n\`\`\`${ctx.language ?? ''}\n${ctx.fullContent}\n\`\`\``);
     }
-
-    if (ctx.extraFiles?.length) {
-      for (const f of ctx.extraFiles) {
-        const ext = path.extname(f.path).slice(1);
-        parts.push(`## File: ${f.path}\n\`\`\`${ext}\n${f.content}\n\`\`\``);
-      }
-    }
+    // Don't embed full file content — Claude Code can read files itself.
+    // Just point it to the file path above.
 
     if (parts.length === 0) return '';
     return `---\n# Context\n\n${parts.join('\n\n')}\n\n---\n\n`;

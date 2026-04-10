@@ -66,6 +66,8 @@ export interface AgentNode extends AgentConfig {
   sessionId?: string;         // claude --session-id, used to --resume later
   turns: number;              // how many messages have been exchanged
   messages: Array<{ role: 'user' | 'assistant'; text: string; timestamp: number }>;
+  isTemplate?: boolean;       // true = design-time placeholder, not yet run
+  customAgentId?: string;     // for custom agent templates, the source agent id
 }
 
 export interface RunResult {
@@ -94,6 +96,7 @@ export interface UsageStats {
 export type ExtToWebMsg =
   | { type: 'addNode';       node: AgentNode }
   | { type: 'updateNode';    id: string; patch: Partial<AgentNode> }
+  | { type: 'removeNode';    id: string }
   | { type: 'addEdge';       from: string; to: string }
   | { type: 'clear' }
   | { type: 'log';           text: string; level: 'info' | 'warn' | 'error' }
@@ -122,7 +125,11 @@ export type WebToExtMsg =
   | { type: 'scheduleAgent'; agentType: AgentType; cronExpr: string; input: string }
   | { type: 'continueConversation'; nodeId: string; message: string }
   | { type: 'requestMemory' }
-  | { type: 'requestUsage' };
+  | { type: 'requestUsage' }
+  | { type: 'addTemplate';       agentType: AgentType; customAgentId?: string; prompt?: string }
+  | { type: 'updateTemplatePrompt'; id: string; prompt: string }
+  | { type: 'removeTemplate';    id: string }
+  | { type: 'runPipeline';       useContext?: boolean; model?: string };
 
 export interface ClaudeJsonResult {
   type: 'result';

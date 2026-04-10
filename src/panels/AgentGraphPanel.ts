@@ -81,6 +81,9 @@ export class AgentGraphPanel {
             this.panel.webview.postMessage({ type: 'addEdge', from: node.parentId, to: node.id } satisfies ExtToWebMsg);
           }
         }
+        for (const e of this.orchestrator.getPipelineEdges()) {
+          this.panel.webview.postMessage({ type: 'addEdge', from: e.from, to: e.to } satisfies ExtToWebMsg);
+        }
         this.orchestrator.emitAgentList();
         this.panel.webview.postMessage({ type: 'history', entries: this.history.getAll() } satisfies ExtToWebMsg);
         this.panel.webview.postMessage({ type: 'memory', files: this.readMemoryFiles() } satisfies ExtToWebMsg);
@@ -125,14 +128,53 @@ export class AgentGraphPanel {
       }
 
       case 'addEdge': {
-        // User manually wired two nodes — trigger a pipeline run
         const fromNode = this.orchestrator.getNodes().find(n => n.id === msg.from);
         const toNode   = this.orchestrator.getNodes().find(n => n.id === msg.to);
-        if (fromNode?.output && toNode) {
-          this.panel.webview.postMessage({ type: 'addEdge', from: msg.from, to: msg.to } satisfies ExtToWebMsg);
-          this.orchestrator.runDirect(toNode.type, fromNode.output, msg.from)
-            .catch((err: Error) => vscode.window.showErrorMessage(`Pipeline error: ${err.message}`));
+        if (!fromNode || !toNode) return;
+
+        // Template → template: record a pipeline edge (no execution yet)
+        if (fromNode.isTemplate && toNode.isTemplate) {
+          const ok = this.orchestrator.addPipelineEdge(msg.from, msg.to);
+          if (!ok) vscode.window.showWarningMessage('Cannot chain — would create a cycle, duplicate, or self-loop.');
+          return;
         }
+        // Live → live (legacy behaviour): need fromNode.output
+        if (!fromNode.output) {
+          vscode.window.showWarningMessage('Chain source has no output yet — wait for it to finish.');
+          return;
+        }
+        this.panel.webview.postMessage({ type: 'addEdge', from: msg.from, to: msg.to } satisfies ExtToWebMsg);
+        const ctx = ContextManager.capture();
+        const inheritedInput = `Previous step "${fromNode.name}" was asked:\n${fromNode.input ?? ''}\n\nIts output:\n${fromNode.output}\n\n---\nYour task follows from that output.`;
+        this.orchestrator.runDirect(toNode.type, inheritedInput, msg.from, undefined, ctx)
+          .catch((err: Error) => vscode.window.showErrorMessage(`Pipeline error: ${err.message}`));
+        break;
+      }
+
+      case 'addTemplate': {
+        const ctx = ContextManager.capture();
+        try {
+          this.orchestrator.addTemplate(msg.agentType, msg.customAgentId, msg.prompt, ctx);
+        } catch (err) {
+          vscode.window.showErrorMessage(`Add template error: ${(err as Error).message}`);
+        }
+        break;
+      }
+
+      case 'updateTemplatePrompt': {
+        this.orchestrator.updateTemplatePrompt(msg.id, msg.prompt);
+        break;
+      }
+
+      case 'removeTemplate': {
+        this.orchestrator.removeTemplate(msg.id);
+        break;
+      }
+
+      case 'runPipeline': {
+        const ctx = msg.useContext ? ContextManager.capture() : undefined;
+        this.orchestrator.runPipeline(ctx, msg.model)
+          .catch((err: Error) => vscode.window.showErrorMessage(`Pipeline error: ${err.message}`));
         break;
       }
 
