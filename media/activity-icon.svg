@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <!-- Lines connecting nodes -->
+  <line x1="3" y1="3" x2="13" y2="8" stroke="#c0c0c0" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="3" y1="13" x2="13" y2="8" stroke="#c0c0c0" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="3" y1="3" x2="3" y2="13" stroke="#c0c0c0" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="3" y1="8" x2="13" y2="8" stroke="#c0c0c0" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- Nodes -->
+  <circle cx="3"  cy="3"  r="2" fill="#c0c0c0"/>
+  <circle cx="3"  cy="13" r="2" fill="#c0c0c0"/>
+  <circle cx="3"  cy="8"  r="1.5" fill="#c0c0c0"/>
+  <circle cx="13" cy="8"  r="2" fill="#c0c0c0"/>
+</svg>

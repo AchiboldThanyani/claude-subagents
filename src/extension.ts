@@ -6,7 +6,7 @@ import { Orchestrator } from './orchestrator/Orchestrator';
 import { checkClaudeCli } from './orchestrator/AgentRunner';
 import { ContextManager } from './context/ContextManager';
 import { HistoryManager } from './history/HistoryManager';
-import { AgentPower, AgentType } from './types';
+import { AgentPower } from './types';
 
 let orchestrator: Orchestrator;
 let statusBarItem: vscode.StatusBarItem;
