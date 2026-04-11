@@ -6,6 +6,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   sessionId?: string;
   resume?: string;
+  idleTimeout?: number;   // ms — overrides SILENCE_IDLE
+  toolTimeout?: number;   // ms — overrides SILENCE_TOOL_USE
 }
 
 const SILENCE_IDLE     = 45_000;
@@ -22,6 +24,10 @@ const TOOL_USE_PATTERNS = [
   /Listed?\s+\d+/i,
   /●+/,
   /\bls\b|\bfind\b|\bgrep\b/,
+  /WebSearch/i,
+  /WebFetch/i,
+  /Fetching/i,
+  /web search/i,
 ];
 
 // ── Patterns safe to strip from FINAL output (conservative) ──────────────
@@ -212,7 +218,9 @@ export async function runAgent(
     const resetSilence = () => {
       if (!promptSent) return;
       if (silenceTimer) clearTimeout(silenceTimer);
-      const timeout = toolUseActive ? SILENCE_TOOL_USE : SILENCE_IDLE;
+      const timeout = toolUseActive
+        ? (opts.toolTimeout ?? SILENCE_TOOL_USE)
+        : (opts.idleTimeout ?? SILENCE_IDLE);
       silenceTimer = setTimeout(() => finish(false), timeout);
     };
 

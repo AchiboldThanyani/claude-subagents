@@ -327,34 +327,29 @@ Rules:
   // ── Claude Feed ────────────────────────────────────────────────────────────
 
   async runClaudeFeed(): Promise<void> {
+    // Use a temp file so we bypass all PTY/TUI output noise.
+    // The agent writes JSON to disk, we read it back directly.
+    // Forward slashes work on all platforms including Windows.
+    const tmpDir = os.tmpdir().replace(/\\/g, '/');
+    const outFile = `${tmpDir}/claude-feed-${Date.now()}.json`;
+
     const FEED_SYSTEM = `You are a research assistant that tracks the latest news and updates from Anthropic and Claude.
-Your ONLY job is to search the web for recent Anthropic / Claude announcements from the last 60 days and return them as structured JSON.
 
-Search these sources:
-- anthropic.com/news
-- anthropic.com/blog
-- Claude Code changelog and release notes
-- Claude model release announcements
+Your task:
+1. Use WebSearch and WebFetch to find the latest Anthropic / Claude announcements, model releases, Claude Code updates, and product news from the last 60 days. Check anthropic.com/news, anthropic.com/blog, and the Claude Code changelog.
+2. Once you have the information, use the Write tool to write the results as a JSON array to this exact file path: ${outFile}
+3. The file contents must be ONLY a valid JSON array — no markdown, no prose, no code fences. Just the raw JSON.
+4. Each array item must have exactly these keys: title (string), date (string, YYYY-MM-DD if known), summary (string, 1-2 sentences), url (string, empty string if none).
+5. Include at most 12 items, newest first.
+6. After writing the file, reply with a single word: DONE
 
-You MUST respond with ONLY a raw JSON array — no intro text, no explanation, no markdown prose. Start your response with [ and end with ].
-
-Example format:
-[
-  {
-    "title": "Article or announcement title",
-    "date": "YYYY-MM-DD",
-    "summary": "1-2 sentence summary of what is new or changed.",
-    "url": "https://full-url"
-  }
-]
-
-Include at most 12 items, newest first. If a URL is not available use an empty string. Do NOT write anything before or after the JSON array.`;
+Do not ask for confirmation. Do not explain what you are doing. Just search, write the file, and say DONE.`;
 
     const config: AgentConfig = {
       id: makeId(),
       name: 'Claude Feed',
       type: 'researcher',
-      powers: ['web'],
+      powers: ['web', 'files'],
       systemPrompt: FEED_SYSTEM,
       model: 'claude-haiku-4-5-20251001',
     };
@@ -366,48 +361,74 @@ Include at most 12 items, newest first. If a URL is not available use an empty s
       status: 'loading',
     } satisfies import('../types').ExtToWebMsg);
 
-    const input = 'Search for the latest Anthropic and Claude news, model releases, and product updates from the last 60 days. Return results as JSON as instructed.';
-    const result = await runAgent(config, input, {});
+    const input = `Search for recent Anthropic and Claude news from the last 60 days, then write the JSON array to this file: ${outFile}`;
 
-    if (!result.success) {
+    try {
+      await runAgent(config, input, {
+        idleTimeout: 120_000,
+        toolTimeout: 120_000,
+      });
+    } catch (err) {
       this.emit('message', {
         type: 'claudeFeed',
         items: [],
         status: 'error',
-        error: result.error ?? 'Researcher agent failed',
+        error: `Agent error: ${(err as Error).message}`,
       } satisfies import('../types').ExtToWebMsg);
       return;
     }
 
-    // Parse JSON — try fenced block, then bracket-aware array extraction
-    let items: import('../types').ClaudeFeedItem[] = [];
-    const candidates: string[] = [];
-    const fenced = result.output.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenced) candidates.push(fenced[1].trim());
-    const extracted = this.extractJsonArray(result.output);
-    if (extracted) candidates.push(extracted);
-
-    let parseErr: string | undefined;
-    for (const raw of candidates) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          items = parsed as import('../types').ClaudeFeedItem[];
-          parseErr = undefined;
-          break;
-        }
-      } catch (e) {
-        parseErr = (e as Error).message;
-      }
-    }
-
-    if (candidates.length === 0 || (parseErr && items.length === 0)) {
-      const preview = result.output.slice(0, 300).replace(/\s+/g, ' ').trim();
+    // Read the file the agent wrote
+    if (!fs.existsSync(outFile)) {
       this.emit('message', {
         type: 'claudeFeed',
         items: [],
         status: 'error',
-        error: `Could not parse feed. Output preview: ${preview || '(empty)'}`,
+        error: 'Agent did not write feed file. It may have run out of time or refused the task — try again.',
+      } satisfies import('../types').ExtToWebMsg);
+      return;
+    }
+
+    let raw: string;
+    try {
+      raw = fs.readFileSync(outFile, 'utf8');
+    } catch (err) {
+      this.emit('message', {
+        type: 'claudeFeed',
+        items: [],
+        status: 'error',
+        error: `Could not read feed file: ${(err as Error).message}`,
+      } satisfies import('../types').ExtToWebMsg);
+      return;
+    } finally {
+      try { fs.unlinkSync(outFile); } catch { /* ignore */ }
+    }
+
+    // Try to parse directly, or extract JSON array from any wrapper text
+    let items: import('../types').ClaudeFeedItem[] = [];
+    const candidates: string[] = [raw.trim()];
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenced) candidates.push(fenced[1].trim());
+    const extracted = this.extractJsonArray(raw);
+    if (extracted) candidates.push(extracted);
+
+    for (const candidate of candidates) {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (Array.isArray(parsed)) {
+          items = parsed as import('../types').ClaudeFeedItem[];
+          break;
+        }
+      } catch { /* try next candidate */ }
+    }
+
+    if (items.length === 0) {
+      const preview = raw.slice(0, 300).replace(/\s+/g, ' ').trim();
+      this.emit('message', {
+        type: 'claudeFeed',
+        items: [],
+        status: 'error',
+        error: `Feed file did not contain valid JSON. Content: ${preview || '(empty)'}`,
       } satisfies import('../types').ExtToWebMsg);
       return;
     }

@@ -2,7 +2,7 @@
   "name": "claude-subagents",
   "displayName": "Claude Subagents",
   "description": "Visualise and orchestrate Claude subagents — plan, review, test, document and more",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "achibold-lukhwareni",
   "engines": { "vscode": "^1.85.0" },
   "icon": "media/icon.png",
