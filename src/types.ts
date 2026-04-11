@@ -111,7 +111,8 @@ export type ExtToWebMsg =
   | { type: 'rules';         store: import('./rules/RulesManager').RulesStore }
   | { type: 'constitution';  content: string; info: import('./constitution/ConstitutionManager').ConstitutionInfo }
   | { type: 'dna';           store: import('./dna/DNAManager').DNAStore }
-  | { type: 'negativeSpace'; findings: NegativeSpaceFinding[]; nodeId: string; status: 'running' | 'done' | 'error'; stream?: string };
+  | { type: 'negativeSpace'; findings: NegativeSpaceFinding[]; nodeId: string; status: 'running' | 'done' | 'error'; stream?: string }
+  | { type: 'knowledge';    entries: import('./knowledge/KnowledgeManager').KnowledgeEntry[] };
 
 /** Messages sent from WebView → Extension Host */
 export type WebToExtMsg =
@@ -147,6 +148,9 @@ export type WebToExtMsg =
   | { type: 'clearConstitution' }
   | { type: 'runNegativeSpace'; model?: string }
   | { type: 'fixFinding'; finding: NegativeSpaceFinding }
+  | { type: 'requestKnowledge' }
+  | { type: 'saveKnowledge'; title: string; content: string; tags: string[]; agentType: string; sourceNodeId?: string }
+  | { type: 'deleteKnowledge'; id: string }
   | { type: 'requestDNA' }
   | { type: 'setDNA'; agentType: string; dna: import('./dna/DNAManager').AgentDNA }
   | { type: 'clearDNA'; agentType: string };

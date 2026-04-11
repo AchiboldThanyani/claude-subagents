@@ -10,6 +10,7 @@ import { HistoryManager } from '../history/HistoryManager';
 import { RulesManager } from '../rules/RulesManager';
 import { ConstitutionManager } from '../constitution/ConstitutionManager';
 import { DNAManager } from '../dna/DNAManager';
+import { KnowledgeManager } from '../knowledge/KnowledgeManager';
 
 function makeId(): string {
   return (crypto as unknown as { randomUUID: () => string }).randomUUID?.() ??
@@ -54,6 +55,7 @@ export class Orchestrator extends EventEmitter {
   rules: RulesManager | undefined;
   constitution: ConstitutionManager | undefined;
   dna: DNAManager | undefined;
+  knowledge: KnowledgeManager | undefined;
 
   constructor(historyManager: HistoryManager, storageDir?: string) {
     super();
@@ -65,6 +67,7 @@ export class Orchestrator extends EventEmitter {
       this.rules = new RulesManager(storageDir);
       this.constitution = new ConstitutionManager(storageDir);
       this.dna = new DNAManager(storageDir);
+      this.knowledge = new KnowledgeManager(storageDir);
     }
   }
 
@@ -121,10 +124,11 @@ export class Orchestrator extends EventEmitter {
     const constitutionBlock = this.constitution?.buildConstitutionBlock() ?? '';
     const dnaBlock          = this.dna?.buildDNABlock('commander') ?? '';
     const rulesBlock        = this.rules?.buildRulesBlock('commander') ?? '';
+    const knowledgeBlock    = this.knowledge?.buildKnowledgeBlock('commander', input) ?? '';
     const contextBlock      = ctx ? ContextManager.buildContextBlock(ctx) : '';
     let streamAccum = '';
 
-    const result = await runAgent(config, constitutionBlock + dnaBlock + rulesBlock + contextBlock + input, {
+    const result = await runAgent(config, constitutionBlock + dnaBlock + rulesBlock + knowledgeBlock + contextBlock + input, {
       signal: ctrl.signal,
       sessionId: node.sessionId,
       onStream: (chunk) => {
@@ -275,10 +279,11 @@ export class Orchestrator extends EventEmitter {
     const constitutionBlock = this.constitution?.buildConstitutionBlock() ?? '';
     const dnaBlock          = this.dna?.buildDNABlock(node.type) ?? '';
     const rulesBlock        = this.rules?.buildRulesBlock(node.type) ?? '';
+    const knowledgeBlock    = this.knowledge?.buildKnowledgeBlock(node.type, message) ?? '';
     const contextBlock      = ctx ? ContextManager.buildContextBlock(ctx) : '';
     let streamAccum = '';
 
-    const result = await runAgent(node, constitutionBlock + dnaBlock + rulesBlock + contextBlock + message, {
+    const result = await runAgent(node, constitutionBlock + dnaBlock + rulesBlock + knowledgeBlock + contextBlock + message, {
       signal: ctrl.signal,
       resume: node.sessionId,
       onStream: (chunk) => {
@@ -778,12 +783,13 @@ export class Orchestrator extends EventEmitter {
     this.abortControllers.set(node.id, ctrl);
     this.bumpActive(1);
 
-    // Prepend constitution + DNA + rules + context block
+    // Prepend constitution + DNA + rules + knowledge + context block
     const constitutionBlock = this.constitution?.buildConstitutionBlock() ?? '';
     const dnaBlock          = this.dna?.buildDNABlock(node.type) ?? '';
     const rulesBlock        = this.rules?.buildRulesBlock(node.type) ?? '';
+    const knowledgeBlock    = this.knowledge?.buildKnowledgeBlock(node.type, input) ?? '';
     const contextBlock      = ctx ? ContextManager.buildContextBlock(ctx) : '';
-    const fullInput         = constitutionBlock + dnaBlock + rulesBlock + contextBlock + input;
+    const fullInput         = constitutionBlock + dnaBlock + rulesBlock + knowledgeBlock + contextBlock + input;
 
     let streamAccum = '';
     const result = await runAgent(node, fullInput, {

@@ -102,6 +102,9 @@ export class AgentGraphPanel {
         if (this.orchestrator.dna) {
           this.panel.webview.postMessage({ type: 'dna', store: this.orchestrator.dna.getStore() } satisfies ExtToWebMsg);
         }
+        if (this.orchestrator.knowledge) {
+          this.panel.webview.postMessage({ type: 'knowledge', entries: this.orchestrator.knowledge.getAll() } satisfies ExtToWebMsg);
+        }
         break;
       }
 
@@ -311,6 +314,34 @@ export class AgentGraphPanel {
         const ctx = ContextManager.capture();
         this.orchestrator.runDirect(finding.fixAgent, finding.fixInput, undefined, undefined, ctx)
           .catch((err: Error) => vscode.window.showErrorMessage(`Fix error: ${err.message}`));
+        break;
+      }
+
+      case 'requestKnowledge': {
+        if (this.orchestrator.knowledge) {
+          this.panel.webview.postMessage({ type: 'knowledge', entries: this.orchestrator.knowledge.getAll() } satisfies ExtToWebMsg);
+        }
+        break;
+      }
+
+      case 'saveKnowledge': {
+        if (!this.orchestrator.knowledge) break;
+        this.orchestrator.knowledge.add({
+          title: msg.title,
+          content: msg.content,
+          tags: msg.tags,
+          agentType: msg.agentType,
+          sourceNodeId: msg.sourceNodeId,
+        });
+        this.panel.webview.postMessage({ type: 'knowledge', entries: this.orchestrator.knowledge.getAll() } satisfies ExtToWebMsg);
+        vscode.window.showInformationMessage(`Saved to Knowledge Base: "${msg.title}"`);
+        break;
+      }
+
+      case 'deleteKnowledge': {
+        if (!this.orchestrator.knowledge) break;
+        this.orchestrator.knowledge.remove(msg.id);
+        this.panel.webview.postMessage({ type: 'knowledge', entries: this.orchestrator.knowledge.getAll() } satisfies ExtToWebMsg);
         break;
       }
 

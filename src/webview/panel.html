@@ -100,6 +100,7 @@
   #commander-btn.active{background:rgba(249,226,175,.18);border-color:rgba(249,226,175,.6);color:#f9e2af}
   #commander-overlay.show{display:flex!important}
   #ns-overlay.show{display:flex!important}
+  #kb-save-modal.show{display:flex!important}
   .ns-finding{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;gap:5px}
   .ns-finding-top{display:flex;align-items:center;gap:8px}
   .ns-sev-high{color:var(--err)}
@@ -431,6 +432,33 @@
   </div>
 </div>
 
+<!-- Knowledge Save modal -->
+<div id="kb-save-modal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);align-items:center;justify-content:center">
+  <div style="width:min(420px,92vw);background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.4)">
+    <div style="padding:12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
+      <span class="ms sm" style="color:var(--accent2)">bookmark_add</span>
+      <span style="font-size:13px;font-weight:600;color:var(--text)">Save to Knowledge Base</span>
+      <button onclick="closeKBSaveModal()" style="margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer"><span class="ms sm">close</span></button>
+    </div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Title</div>
+        <input id="kb-save-title" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')submitKBSave()">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Tags <span style="color:var(--border)">(comma separated)</span></div>
+        <input id="kb-save-tags" type="text" placeholder="e.g. auth, typescript, api" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')submitKBSave()">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button onclick="closeKBSaveModal()" style="flex:1;padding:7px;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:7px;cursor:pointer;font-size:12px">Cancel</button>
+        <button onclick="submitKBSave()" style="flex:2;padding:7px;background:var(--accent2);border:none;color:#1e1e2e;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Output expand modal -->
 <div id="output-modal">
   <div id="output-modal-inner">
@@ -470,6 +498,7 @@
       <div class="stab"        id="tab-rules"     onclick="switchTab('rules')"  title="Rules"><span class="ms sm">rule</span></div>
       <div class="stab"        id="tab-constitution" onclick="switchTab('constitution')" title="Constitution"><span class="ms sm">gavel</span></div>
       <div class="stab"        id="tab-dna"          onclick="switchTab('dna')"          title="Agent DNA"><span class="ms sm">biotech</span></div>
+      <div class="stab"        id="tab-knowledge"    onclick="switchTab('knowledge')"    title="Knowledge Base"><span class="ms sm">local_library</span></div>
     </div>
 
     <div id="sidebar-body">
@@ -725,6 +754,21 @@
             <button onclick="saveConstitution()" style="padding:6px 16px;background:var(--accent);border:none;color:#fff;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600">Save</button>
           </div>
         </div>
+      </div>
+
+      <!-- KNOWLEDGE -->
+      <div id="panel-knowledge" style="display:none">
+        <div class="tab-header">
+          <span class="tab-header-title"><span class="ms sm">local_library</span> Knowledge Base</span>
+          <span id="kb-count" style="font-size:10px;color:var(--muted);margin-left:4px"></span>
+        </div>
+        <!-- Search -->
+        <div style="padding:6px 12px;border-bottom:1px solid var(--border)">
+          <input id="kb-search" type="text" placeholder="Search knowledge…"
+            style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--text);font-size:11px;box-sizing:border-box"
+            oninput="filterKnowledge(this.value)">
+        </div>
+        <div id="kb-body" style="padding:8px 12px;display:flex;flex-direction:column;gap:8px;overflow-y:auto"></div>
       </div>
 
       <!-- DNA -->
@@ -1118,7 +1162,10 @@ function renderDetail() {
   // Single expand button — always at the bottom, only when there's content
   const hasContent = node.output || node.streamBuffer;
   const expandBtn = hasContent && node.status !== 'running'
-    ? `<button class="chat-expand-btn" onclick="openModal('${node.id}')"><span class="ms sm" style="font-size:12px">open_in_full</span> Expand</button>`
+    ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+        <button class="chat-expand-btn" onclick="openModal('${node.id}')"><span class="ms sm" style="font-size:12px">open_in_full</span> Expand</button>
+        <button class="chat-expand-btn" onclick="saveToKnowledge()" title="Save output to Knowledge Base" style="background:var(--accent2)22;border-color:var(--accent2)44;color:var(--accent2)"><span class="ms sm" style="font-size:12px">bookmark_add</span> Save to KB</button>
+      </div>`
     : '';
 
   const errHtml = node.error ? `
@@ -1175,6 +1222,11 @@ function insertInline() {
 }
 function exportMd() {
   if(selectedId) vscode.postMessage({type:'exportMarkdown',nodeId:selectedId});
+}
+function saveToKnowledge() {
+  const node = nodes.get(selectedId);
+  if (!node?.output) return;
+  showSaveKnowledgeForm(node);
 }
 
 // ── Commander ──────────────────────────────────────────────────────────────
@@ -1262,6 +1314,9 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && document.getElementById('ns-overlay').classList.contains('show')) {
     closeNSOverlay();
+  }
+  if (e.key === 'Escape' && document.getElementById('kb-save-modal').classList.contains('show')) {
+    closeKBSaveModal();
   }
 });
 
@@ -1487,7 +1542,7 @@ function toggleSidebar() {
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
-const TABS=['detail','run','create','schedule','memory','usage','history','log','rules','constitution','dna'];
+const TABS=['detail','run','create','schedule','memory','usage','history','log','rules','constitution','dna','knowledge'];
 function switchTab(name) {
   TABS.forEach(t=>{
     const p = document.getElementById('panel-'+t);
@@ -1500,6 +1555,7 @@ function switchTab(name) {
   if (name==='rules')        vscode.postMessage({type:'requestRules'});
   if (name==='constitution') vscode.postMessage({type:'requestConstitution'});
   if (name==='dna')          vscode.postMessage({type:'requestDNA'});
+  if (name==='knowledge')    vscode.postMessage({type:'requestKnowledge'});
 }
 
 // ── Output modal ───────────────────────────────────────────────────────────
@@ -1912,6 +1968,104 @@ function renderUsage(stats) {
   }).join('');
 }
 
+// ── Knowledge Base ─────────────────────────────────────────────────────────
+let allKnowledgeEntries = [];
+
+function renderKnowledge(entries) {
+  allKnowledgeEntries = entries || [];
+  document.getElementById('kb-count').textContent = entries.length ? `${entries.length}` : '';
+  filterKnowledge(document.getElementById('kb-search')?.value || '');
+}
+
+function filterKnowledge(query) {
+  const body = document.getElementById('kb-body');
+  const q = query.toLowerCase().trim();
+  const filtered = q
+    ? allKnowledgeEntries.filter(e =>
+        e.title.toLowerCase().includes(q) ||
+        e.tags.some(t => t.includes(q)) ||
+        e.content.toLowerCase().includes(q))
+    : allKnowledgeEntries;
+
+  if (!filtered.length) {
+    body.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--muted)">
+      <span class="ms" style="font-size:32px;color:var(--border)">local_library</span>
+      <p style="margin-top:8px;font-size:11px">${q ? 'No results' : 'No knowledge saved yet'}</p>
+      <p style="font-size:11px;color:var(--border);margin-top:4px">${q ? '' : 'Run an agent, then click <strong>Save to KB</strong>'}</p>
+    </div>`;
+    return;
+  }
+
+  body.innerHTML = filtered.map(e => {
+    const tc = TYPE_COLOR[e.agentType] || 'var(--accent2)';
+    const icon = TYPE_ICONS[e.agentType] || 'smart_toy';
+    const date = new Date(e.timestamp).toLocaleDateString();
+    const preview = e.content.length > 120 ? e.content.slice(0, 120) + '…' : e.content;
+    return `<div class="mem-card" onclick="this.classList.toggle('expanded')">
+      <div class="mem-card-top" style="align-items:flex-start">
+        <div class="mem-card-icon" style="background:${tc}1a;flex-shrink:0">
+          <span class="ms sm" style="font-size:13px;color:${tc}">${icon}</span>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="mem-card-name">${esc(e.title)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${date} · ${esc(e.agentType)}</div>
+        </div>
+        <button onclick="event.stopPropagation();deleteKnowledge('${e.id}')" title="Delete" style="background:none;border:none;cursor:pointer;padding:2px;flex-shrink:0">
+          <span class="ms sm" style="font-size:14px;color:var(--err)">delete</span>
+        </button>
+      </div>
+      ${e.tags.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${e.tags.map(t => `<span style="font-size:10px;padding:1px 6px;background:${tc}18;color:${tc};border-radius:4px">${esc(t)}</span>`).join('')}</div>` : ''}
+      <div class="mem-card-desc">${esc(preview)}</div>
+      <div class="mem-card-body" style="white-space:pre-wrap">${esc(e.content)}</div>
+    </div>`;
+  }).join('');
+}
+
+function deleteKnowledge(id) {
+  vscode.postMessage({ type: 'deleteKnowledge', id });
+}
+
+// ── Save to Knowledge form (modal) ─────────────────────────────────────────
+let _pendingKBNode = null;
+
+function showSaveKnowledgeForm(node) {
+  _pendingKBNode = node;
+  const modal = document.getElementById('kb-save-modal');
+  document.getElementById('kb-save-title').value = node.name + ' — ' + new Date().toLocaleDateString();
+  // Auto-suggest tags from agent type + input keywords
+  const autoTags = [node.type];
+  const inputWords = (node.input || '').toLowerCase().split(/\W+/).filter(w => w.length > 3);
+  // Take up to 3 unique meaningful words from input
+  const extra = [...new Set(inputWords)].slice(0, 3);
+  document.getElementById('kb-save-tags').value = [...autoTags, ...extra].join(', ');
+  modal.classList.add('show');
+  setTimeout(() => document.getElementById('kb-save-title').select(), 50);
+}
+
+function closeKBSaveModal() {
+  document.getElementById('kb-save-modal').classList.remove('show');
+  _pendingKBNode = null;
+}
+
+function submitKBSave() {
+  if (!_pendingKBNode) return;
+  const title = document.getElementById('kb-save-title').value.trim();
+  if (!title) return;
+  const tagsRaw = document.getElementById('kb-save-tags').value;
+  const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+  vscode.postMessage({
+    type: 'saveKnowledge',
+    title,
+    content: _pendingKBNode.output,
+    tags,
+    agentType: _pendingKBNode.type,
+    sourceNodeId: _pendingKBNode.id,
+  });
+  closeKBSaveModal();
+  // Switch to knowledge tab to show the saved entry
+  switchTab('knowledge');
+}
+
 // ── Agent DNA ──────────────────────────────────────────────────────────────
 const DNA_AGENT_LIST = [
   { type: 'coder',          label: 'Coder' },
@@ -2267,6 +2421,9 @@ window.addEventListener('message', e=>{
       break;
     case 'negativeSpace':
       renderNSFindings(msg.findings, msg.status, msg.stream);
+      break;
+    case 'knowledge':
+      renderKnowledge(msg.entries);
       break;
   }
 });
