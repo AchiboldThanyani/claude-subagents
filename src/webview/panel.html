@@ -99,6 +99,12 @@
   #chain-mode-btn.active{background:rgba(249,226,175,.12);border-color:rgba(249,226,175,.35);color:var(--warn)}
   #commander-btn.active{background:rgba(249,226,175,.18);border-color:rgba(249,226,175,.6);color:#f9e2af}
   #commander-overlay.show{display:flex!important}
+  #ns-overlay.show{display:flex!important}
+  .ns-finding{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;gap:5px}
+  .ns-finding-top{display:flex;align-items:center;gap:8px}
+  .ns-sev-high{color:var(--err)}
+  .ns-sev-medium{color:var(--warn)}
+  .ns-sev-low{color:var(--muted)}
   .cmd-msg{padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
   .cmd-msg.user{background:rgba(249,226,175,.08);border:1px solid rgba(249,226,175,.15);color:#f9e2af;align-self:flex-end;max-width:90%}
   .cmd-msg.assistant{background:var(--bg);border:1px solid var(--border);color:var(--text);align-self:flex-start;max-width:95%}
@@ -356,6 +362,7 @@
     <button id="chain-mode-btn" class="tb-btn tb-btn-ghost" onclick="toggleChainMode()" title="Chain mode: click two nodes to pipe output"><span class="ms">cable</span> Chain</button>
     <button id="run-pipeline-btn" class="tb-btn tb-btn-ghost" onclick="runPipelineBtn()" title="Run all templates on the canvas as a pipeline"><span class="ms">rocket_launch</span> Run Pipeline</button>
     <button id="commander-btn" class="tb-btn tb-btn-ghost" onclick="toggleCommanderOverlay()" title="Commander — natural language agent orchestration" style="border-color:rgba(249,226,175,.35);color:#f9e2af"><span class="ms">military_tech</span> Commander</button>
+    <button id="ns-btn" class="tb-btn tb-btn-ghost" onclick="toggleNSOverlay()" title="Negative Space — find what's missing in your codebase" style="border-color:rgba(137,180,250,.35);color:#89b4fa"><span class="ms">search_insights</span> Scan</button>
     <button class="tb-btn tb-btn-ghost" onclick="clearGraph()" title="Clear canvas" style="padding:4px 8px"><span class="ms">delete_sweep</span></button>
   </div>
 </div>
@@ -383,6 +390,44 @@
       <button type="button" class="model-chip" data-cmd-model="claude-haiku-4-5-20251001" onclick="selectCmdModel(this)">Haiku 4.5</button>
     </div>
     <div style="padding:0 16px 10px;font-size:10px;color:var(--muted)">Ctrl+Enter to send · Esc to close · Agents spawn on the canvas as Commander works</div>
+  </div>
+</div>
+
+<!-- Negative Space overlay -->
+<div id="ns-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:flex-start;justify-content:center;padding-top:48px">
+  <div style="width:min(720px,96vw);max-height:80vh;background:var(--surface);border:1px solid rgba(137,180,250,.35);border-radius:14px;box-shadow:0 0 40px rgba(137,180,250,.12);overflow:hidden;display:flex;flex-direction:column">
+
+    <!-- Header -->
+    <div style="padding:12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <span class="ms" style="color:#89b4fa;font-size:18px">search_insights</span>
+      <span style="font-size:13px;font-weight:600;color:#89b4fa">Negative Space</span>
+      <span style="font-size:11px;color:var(--muted);margin-left:4px">— what's missing from your codebase</span>
+      <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+        <button id="ns-scan-btn" onclick="startNSScan()" style="padding:5px 14px;background:#89b4fa;border:none;color:#1e1e2e;border-radius:7px;cursor:pointer;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px">
+          <span class="ms sm" style="font-size:13px">search_insights</span> Scan Now
+        </button>
+        <button onclick="closeNSOverlay()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px"><span class="ms sm">close</span></button>
+      </div>
+    </div>
+
+    <!-- Model selector -->
+    <div style="padding:8px 16px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <span style="font-size:10px;color:var(--muted)">Model:</span>
+      <button type="button" class="model-chip active" data-ns-model="claude-sonnet-4-6" onclick="selectNSModel(this)">Sonnet 4.6</button>
+      <button type="button" class="model-chip" data-ns-model="claude-opus-4-6" onclick="selectNSModel(this)">Opus 4.6</button>
+      <button type="button" class="model-chip" data-ns-model="claude-haiku-4-5-20251001" onclick="selectNSModel(this)">Haiku 4.5</button>
+    </div>
+
+    <!-- Body -->
+    <div id="ns-body" style="flex:1;overflow-y:auto;padding:12px 16px">
+      <div id="ns-empty" style="text-align:center;padding:40px 0;color:var(--muted)">
+        <span class="ms" style="font-size:36px;color:var(--border)">search_insights</span>
+        <p style="margin-top:10px;font-size:12px">Click <strong>Scan Now</strong> to analyse your codebase</p>
+        <p style="font-size:11px;color:var(--border);margin-top:4px">Finds missing tests, docs, error handling, types and more</p>
+      </div>
+      <div id="ns-stream" style="display:none;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);white-space:pre-wrap;max-height:120px;overflow-y:auto;padding:8px;background:var(--bg);border-radius:7px;margin-bottom:12px"></div>
+      <div id="ns-findings" style="display:none;display:flex;flex-direction:column;gap:8px"></div>
+    </div>
   </div>
 </div>
 
@@ -1215,7 +1260,140 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.getElementById('commander-overlay').classList.contains('show')) {
     closeCommanderOverlay();
   }
+  if (e.key === 'Escape' && document.getElementById('ns-overlay').classList.contains('show')) {
+    closeNSOverlay();
+  }
 });
+
+// ── Negative Space ─────────────────────────────────────────────────────────
+const NS_CATEGORY_ICONS = {
+  'missing-tests':          'science',
+  'missing-docs':           'description',
+  'missing-error-handling': 'error',
+  'missing-validation':     'shield',
+  'missing-types':          'data_object',
+  'missing-comments':       'comment',
+  'other':                  'warning',
+};
+const NS_CATEGORY_LABELS = {
+  'missing-tests':          'Missing Tests',
+  'missing-docs':           'Missing Docs',
+  'missing-error-handling': 'Missing Error Handling',
+  'missing-validation':     'Missing Validation',
+  'missing-types':          'Missing Types',
+  'missing-comments':       'Missing Comments',
+  'other':                  'Other',
+};
+const NS_FIX_ICONS = {
+  'test-writer':  'science',
+  'docs-writer':  'description',
+  'bug-finder':   'pest_control',
+  'coder':        'code',
+  'refactor':     'auto_fix_high',
+};
+
+function toggleNSOverlay() {
+  const overlay = document.getElementById('ns-overlay');
+  const btn = document.getElementById('ns-btn');
+  const isOpen = overlay.classList.toggle('show');
+  btn.classList.toggle('active', isOpen);
+}
+
+function closeNSOverlay() {
+  document.getElementById('ns-overlay').classList.remove('show');
+  document.getElementById('ns-btn').classList.remove('active');
+}
+
+function selectNSModel(el) {
+  document.querySelectorAll('[data-ns-model]').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+function getNSModel() {
+  return document.querySelector('[data-ns-model].active')?.dataset.nsModel || 'claude-sonnet-4-6';
+}
+
+function startNSScan() {
+  document.getElementById('ns-empty').style.display = 'none';
+  document.getElementById('ns-stream').style.display = 'block';
+  document.getElementById('ns-stream').textContent = 'Scanning…';
+  document.getElementById('ns-findings').style.display = 'none';
+  document.getElementById('ns-findings').innerHTML = '';
+  document.getElementById('ns-scan-btn').disabled = true;
+  vscode.postMessage({ type: 'runNegativeSpace', model: getNSModel() });
+}
+
+function renderNSFindings(findings, status, stream) {
+  const scanBtn = document.getElementById('ns-scan-btn');
+  const streamEl = document.getElementById('ns-stream');
+  const findingsEl = document.getElementById('ns-findings');
+  const emptyEl = document.getElementById('ns-empty');
+
+  if (status === 'running') {
+    streamEl.style.display = 'block';
+    streamEl.textContent = stream || 'Scanning…';
+    streamEl.scrollTop = streamEl.scrollHeight;
+    scanBtn.disabled = true;
+    return;
+  }
+
+  scanBtn.disabled = false;
+
+  if (!findings || findings.length === 0) {
+    streamEl.style.display = 'none';
+    emptyEl.style.display = 'block';
+    emptyEl.innerHTML = `<span class="ms" style="font-size:36px;color:var(--ok)">check_circle</span><p style="margin-top:10px;font-size:12px;color:var(--ok)">No gaps found — codebase looks solid!</p>`;
+    return;
+  }
+
+  streamEl.style.display = 'none';
+  findingsEl.style.display = 'flex';
+
+  // Group by severity
+  const high   = findings.filter(f => f.severity === 'high');
+  const medium = findings.filter(f => f.severity === 'medium');
+  const low    = findings.filter(f => f.severity === 'low');
+
+  // Summary bar
+  const summaryHtml = `<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <span style="font-size:11px;font-weight:700;color:var(--text)">${findings.length} finding${findings.length!==1?'s':''}</span>
+    ${high.length   ? `<span style="font-size:10px;padding:2px 7px;background:var(--err)22;color:var(--err);border-radius:4px">${high.length} high</span>` : ''}
+    ${medium.length ? `<span style="font-size:10px;padding:2px 7px;background:var(--warn)22;color:var(--warn);border-radius:4px">${medium.length} medium</span>` : ''}
+    ${low.length    ? `<span style="font-size:10px;padding:2px 7px;background:var(--surface);color:var(--muted);border-radius:4px">${low.length} low</span>` : ''}
+  </div>`;
+
+  const findingHtml = (f, i) => {
+    const icon  = NS_CATEGORY_ICONS[f.category] || 'warning';
+    const label = NS_CATEGORY_LABELS[f.category] || f.category;
+    const sevClass = `ns-sev-${f.severity}`;
+    const sevIcon = f.severity === 'high' ? 'error' : f.severity === 'medium' ? 'warning' : 'info';
+    const fixIcon = NS_FIX_ICONS[f.fixAgent] || 'build';
+
+    return `<div class="ns-finding">
+      <div class="ns-finding-top">
+        <span class="ms sm ${sevClass}" style="font-size:15px">${sevIcon}</span>
+        <span style="font-size:12px;font-weight:600;color:var(--text);flex:1">${esc(f.title)}</span>
+        <span style="font-size:10px;padding:2px 6px;background:var(--surface);color:var(--muted);border-radius:4px">${esc(label)}</span>
+      </div>
+      ${f.file ? `<div style="font-size:10px;color:var(--accent2);font-family:'DM Mono',monospace">${esc(f.file)}</div>` : ''}
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">${esc(f.suggestion)}</div>
+      ${f.fixAgent ? `<button onclick="fixFinding(${i})" style="align-self:flex-start;display:flex;align-items:center;gap:4px;padding:4px 10px;background:var(--accent)22;border:1px solid var(--accent)44;color:var(--accent);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+        <span class="ms sm" style="font-size:13px">${fixIcon}</span> Fix with ${esc(f.fixAgent)}
+      </button>` : ''}
+    </div>`;
+  };
+
+  findingsEl.innerHTML = summaryHtml + findings.map((f, i) => findingHtml(f, i)).join('');
+
+  // Store findings for fixFinding()
+  window._nsFindings = findings;
+}
+
+function fixFinding(index) {
+  const findings = window._nsFindings;
+  if (!findings || !findings[index]) return;
+  vscode.postMessage({ type: 'fixFinding', finding: findings[index] });
+  closeNSOverlay();
+}
 
 let tplDebounce = null;
 function updateTemplatePrompt(id, value) {
@@ -2077,6 +2255,9 @@ window.addEventListener('message', e=>{
       break;
     case 'dna':
       renderDNA(msg.store);
+      break;
+    case 'negativeSpace':
+      renderNSFindings(msg.findings, msg.status, msg.stream);
       break;
   }
 });

@@ -298,6 +298,22 @@ export class AgentGraphPanel {
         break;
       }
 
+      case 'runNegativeSpace': {
+        const ctx = ContextManager.capture();
+        this.orchestrator.runNegativeSpace(ctx, msg.model)
+          .catch((err: Error) => vscode.window.showErrorMessage(`Negative Space error: ${err.message}`));
+        break;
+      }
+
+      case 'fixFinding': {
+        const { finding } = msg;
+        if (!finding.fixAgent || !finding.fixInput) break;
+        const ctx = ContextManager.capture();
+        this.orchestrator.runDirect(finding.fixAgent, finding.fixInput, undefined, undefined, ctx)
+          .catch((err: Error) => vscode.window.showErrorMessage(`Fix error: ${err.message}`));
+        break;
+      }
+
       case 'requestDNA': {
         if (this.orchestrator.dna) {
           this.panel.webview.postMessage({ type: 'dna', store: this.orchestrator.dna.getStore() } satisfies ExtToWebMsg);

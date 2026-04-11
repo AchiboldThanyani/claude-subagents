@@ -20,6 +20,7 @@ export type AgentType =
   | 'docs-writer'
   | 'refactor'
   | 'commander'
+  | 'negative-space'
   | 'custom';
 
 export interface EditorContext {
@@ -109,7 +110,8 @@ export type ExtToWebMsg =
   | { type: 'usage';         stats: UsageStats }
   | { type: 'rules';         store: import('./rules/RulesManager').RulesStore }
   | { type: 'constitution';  content: string; info: import('./constitution/ConstitutionManager').ConstitutionInfo }
-  | { type: 'dna';           store: import('./dna/DNAManager').DNAStore };
+  | { type: 'dna';           store: import('./dna/DNAManager').DNAStore }
+  | { type: 'negativeSpace'; findings: NegativeSpaceFinding[]; nodeId: string; status: 'running' | 'done' | 'error'; stream?: string };
 
 /** Messages sent from WebView → Extension Host */
 export type WebToExtMsg =
@@ -143,9 +145,21 @@ export type WebToExtMsg =
   | { type: 'requestConstitution' }
   | { type: 'saveConstitution';  content: string }
   | { type: 'clearConstitution' }
+  | { type: 'runNegativeSpace'; model?: string }
+  | { type: 'fixFinding'; finding: NegativeSpaceFinding }
   | { type: 'requestDNA' }
   | { type: 'setDNA'; agentType: string; dna: import('./dna/DNAManager').AgentDNA }
   | { type: 'clearDNA'; agentType: string };
+
+export interface NegativeSpaceFinding {
+  category: 'missing-tests' | 'missing-docs' | 'missing-error-handling' | 'missing-validation' | 'missing-types' | 'missing-comments' | 'other';
+  title: string;
+  file?: string;
+  severity: 'high' | 'medium' | 'low';
+  suggestion: string;
+  fixAgent?: AgentType;
+  fixInput?: string;
+}
 
 export interface ClaudeJsonResult {
   type: 'result';

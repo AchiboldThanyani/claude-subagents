@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { AgentConfig, AgentNode, AgentType, EditorContext, ExtToWebMsg } from '../types';
 import { runAgent } from './AgentRunner';
-import { BUILTIN_AGENTS, PLANNER_AGENT, COMMANDER_AGENT } from './builtinAgents';
+import { BUILTIN_AGENTS, PLANNER_AGENT, COMMANDER_AGENT, NEGATIVE_SPACE_AGENT } from './builtinAgents';
 import { ContextManager } from '../context/ContextManager';
 import { HistoryManager } from '../history/HistoryManager';
 import { RulesManager } from '../rules/RulesManager';
@@ -165,6 +165,98 @@ export class Orchestrator extends EventEmitter {
     });
 
     return this.nodes.get(node.id)!;
+  }
+
+  // ── Negative Space ─────────────────────────────────────────────────────────
+
+  async runNegativeSpace(ctx?: EditorContext, model?: string): Promise<AgentNode> {
+    const config: AgentConfig = { ...NEGATIVE_SPACE_AGENT, id: makeId(), ...(model ? { model } : {}) };
+    const workspaceFolder = ctx?.workspaceFolder ?? '';
+    const input = workspaceFolder
+      ? `Analyse the workspace at: ${workspaceFolder}\n\nScan all source files and identify what is missing.`
+      : 'Scan the current workspace and identify what is missing.';
+
+    const node = this.createNode(config, input, undefined, ctx);
+    this.updateNode(node.id, { status: 'running', startTime: Date.now() });
+
+    const ctrl = new AbortController();
+    this.abortControllers.set(node.id, ctrl);
+    this.bumpActive(1);
+
+    const constitutionBlock = this.constitution?.buildConstitutionBlock() ?? '';
+    const dnaBlock          = this.dna?.buildDNABlock('negative-space') ?? '';
+    const rulesBlock        = this.rules?.buildRulesBlock('negative-space') ?? '';
+    let streamAccum = '';
+
+    // Emit running state to webview immediately
+    this.emit('message', {
+      type: 'negativeSpace',
+      findings: [],
+      nodeId: node.id,
+      status: 'running',
+      stream: '',
+    } satisfies ExtToWebMsg);
+
+    const result = await runAgent(config, constitutionBlock + dnaBlock + rulesBlock + input, {
+      signal: ctrl.signal,
+      sessionId: node.sessionId,
+      onStream: (chunk) => {
+        streamAccum += chunk;
+        this.updateNode(node.id, { streamBuffer: streamAccum });
+        this.emit('message', {
+          type: 'negativeSpace',
+          findings: [],
+          nodeId: node.id,
+          status: 'running',
+          stream: streamAccum,
+        } satisfies ExtToWebMsg);
+      },
+    });
+
+    this.abortControllers.delete(node.id);
+    this.bumpActive(-1);
+
+    const finalStatus = result.success ? 'done' : 'error';
+    this.updateNode(node.id, {
+      status: finalStatus,
+      output: result.output,
+      error: result.error,
+      streamBuffer: undefined,
+      endTime: Date.now(),
+    });
+
+    // Parse findings from output
+    const findings = this.parseNegativeSpaceFindings(result.output);
+    this.emit('message', {
+      type: 'negativeSpace',
+      findings,
+      nodeId: node.id,
+      status: finalStatus,
+      stream: result.output,
+    } satisfies ExtToWebMsg);
+
+    this.history.add({
+      agentName: config.name,
+      agentType: config.type,
+      input,
+      output: result.output,
+      timestamp: Date.now(),
+      durationMs: result.durationMs,
+      success: result.success,
+    });
+
+    return this.nodes.get(node.id)!;
+  }
+
+  private parseNegativeSpaceFindings(output: string): import('../types').NegativeSpaceFinding[] {
+    const match = output.match(/```findings\s*([\s\S]*?)```/);
+    if (!match) return [];
+    try {
+      return JSON.parse(match[1].trim()) as import('../types').NegativeSpaceFinding[];
+    } catch {
+      this.log('Negative Space: failed to parse findings block', 'warn');
+      return [];
+    }
   }
 
   async continueCommander(nodeId: string, message: string, ctx?: EditorContext): Promise<void> {
