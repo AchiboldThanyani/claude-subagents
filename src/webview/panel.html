@@ -101,6 +101,7 @@
   #commander-overlay.show{display:flex!important}
   #ns-overlay.show{display:flex!important}
   #kb-save-modal.show{display:flex!important}
+  #enhance-modal.show{display:flex!important}
   #save-pipeline-modal.show{display:flex!important}
   #pipeline-templates-overlay.show{display:flex!important}
   .ns-finding{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;gap:5px}
@@ -383,7 +384,10 @@
     </div>
     <div id="commander-history" style="max-height:260px;overflow-y:auto;padding:10px 16px;display:flex;flex-direction:column;gap:8px"></div>
     <div style="padding:10px 12px 12px;position:relative">
-      <textarea id="commander-input" placeholder='e.g. "Review auth.ts then write tests for any bugs found"' style="width:100%;min-height:52px;max-height:140px;background:rgba(249,226,175,.04);border:1px solid rgba(249,226,175,.2);border-radius:8px;padding:9px 44px 9px 12px;color:var(--text);font-family:'DM Sans',system-ui;font-size:13px;resize:none;box-sizing:border-box;outline:none" oninput="autoResize(this)" onkeydown="handleCommanderKey(event)"></textarea>
+      <textarea id="commander-input" placeholder='e.g. "Review auth.ts then write tests for any bugs found"' style="width:100%;min-height:52px;max-height:140px;background:rgba(249,226,175,.04);border:1px solid rgba(249,226,175,.2);border-radius:8px;padding:9px 80px 9px 12px;color:var(--text);font-family:'DM Sans',system-ui;font-size:13px;resize:none;box-sizing:border-box;outline:none" oninput="autoResize(this)" onkeydown="handleCommanderKey(event)"></textarea>
+      <button onclick="enhanceCommanderInput()" title="Enhance prompt" style="position:absolute;bottom:19px;right:56px;background:rgba(249,226,175,.15);border:1px solid rgba(249,226,175,.25);color:#f9e2af;border-radius:6px;height:30px;padding:0 7px;cursor:pointer;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700">
+        <span class="ms sm" style="font-size:12px">auto_awesome</span>
+      </button>
       <button onclick="submitCommander()" style="position:absolute;bottom:19px;right:20px;background:#f9e2af;border:none;color:#1e1e2e;border-radius:6px;width:30px;height:30px;cursor:pointer;display:flex;align-items:center;justify-content:center">
         <span class="ms sm" style="font-size:14px">send</span>
       </button>
@@ -395,6 +399,40 @@
       <button type="button" class="model-chip" data-cmd-model="claude-haiku-4-5-20251001" onclick="selectCmdModel(this)">Haiku 4.5</button>
     </div>
     <div style="padding:0 16px 10px;font-size:10px;color:var(--muted)">Ctrl+Enter to send · Esc to close · Agents spawn on the canvas as Commander works</div>
+  </div>
+</div>
+
+<!-- Prompt Enhance modal -->
+<div id="enhance-modal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.65);align-items:center;justify-content:center">
+  <div style="width:min(580px,95vw);max-height:85vh;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.5);display:flex;flex-direction:column">
+    <div style="padding:12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <span class="ms sm" style="color:var(--accent)">auto_awesome</span>
+      <span style="font-size:13px;font-weight:600;color:var(--text)">Prompt Enhanced</span>
+      <button onclick="closeEnhanceModal()" style="margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer"><span class="ms sm">close</span></button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+      <div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Original</div>
+        <div id="enhance-original" style="font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;white-space:pre-wrap;line-height:1.6"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;color:var(--accent)">
+        <div style="flex:1;height:1px;background:var(--accent)33"></div>
+        <span class="ms sm" style="font-size:16px">arrow_downward</span>
+        <div style="flex:1;height:1px;background:var(--accent)33"></div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--accent);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Enhanced</div>
+        <textarea id="enhance-result"
+          style="width:100%;min-height:100px;font-size:12px;background:var(--bg);border:1px solid var(--accent)55;border-radius:8px;padding:10px 12px;color:var(--text);line-height:1.6;resize:vertical;box-sizing:border-box;font-family:'DM Sans',system-ui"
+          oninput="autoResize(this)"></textarea>
+      </div>
+    </div>
+    <div style="padding:10px 16px 14px;display:flex;gap:8px;border-top:1px solid var(--border);flex-shrink:0">
+      <button onclick="closeEnhanceModal()" style="flex:1;padding:8px;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;font-size:12px">Discard</button>
+      <button onclick="acceptEnhanced()" style="flex:2;padding:8px;background:var(--accent);border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px">
+        <span class="ms sm" style="font-size:14px">check</span> Use Enhanced Prompt
+      </button>
+    </div>
   </div>
 </div>
 
@@ -590,7 +628,13 @@
         </div>
         <div class="run-section">
           <label>Prompt</label>
-          <textarea id="run-input" placeholder="Describe the task…" oninput="autoResize(this)"></textarea>
+          <div style="position:relative">
+            <textarea id="run-input" placeholder="Describe the task…" oninput="autoResize(this)" style="padding-right:90px"></textarea>
+            <button id="enhance-run-btn" onclick="enhanceRunInput()" title="Enhance prompt with AI"
+              style="position:absolute;top:6px;right:6px;padding:3px 8px;background:var(--accent)22;border:1px solid var(--accent)44;color:var(--accent);border-radius:6px;cursor:pointer;font-size:10px;font-weight:700;display:flex;align-items:center;gap:3px;white-space:nowrap">
+              <span class="ms sm" style="font-size:12px">auto_awesome</span> Enhance
+            </button>
+          </div>
         </div>
         <div class="toggle-row">
           <label class="checkbox-row" style="margin:0"><input type="checkbox" id="run-use-context" checked> <span class="ms sm" style="color:var(--accent2)">attach_file</span> Include current file context</label>
@@ -1363,6 +1407,9 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.getElementById('kb-save-modal').classList.contains('show')) {
     closeKBSaveModal();
   }
+  if (e.key === 'Escape' && document.getElementById('enhance-modal').classList.contains('show')) {
+    closeEnhanceModal();
+  }
   if (e.key === 'Escape' && document.getElementById('save-pipeline-modal').classList.contains('show')) {
     closeSavePipelineModal();
   }
@@ -2019,6 +2066,58 @@ function renderUsage(stats) {
   }).join('');
 }
 
+// ── Prompt Enhancer ────────────────────────────────────────────────────────
+let _enhanceTarget = 'run'; // 'run' or 'commander'
+
+function enhanceRunInput() {
+  const input = document.getElementById('run-input').value.trim();
+  if (!input) return;
+  _enhanceTarget = 'run';
+  const btn = document.getElementById('enhance-run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="ms sm spinner" style="font-size:12px">sync</span> Enhancing…';
+  vscode.postMessage({ type: 'enhancePrompt', input, target: 'run' });
+}
+
+function enhanceCommanderInput() {
+  const input = document.getElementById('commander-input').value.trim();
+  if (!input) return;
+  _enhanceTarget = 'commander';
+  vscode.postMessage({ type: 'enhancePrompt', input, target: 'commander' });
+}
+
+function showEnhanceModal(original, enhanced) {
+  document.getElementById('enhance-original').textContent = original;
+  const resultEl = document.getElementById('enhance-result');
+  resultEl.value = enhanced;
+  autoResize(resultEl);
+  document.getElementById('enhance-modal').classList.add('show');
+  // Reset enhance button
+  const btn = document.getElementById('enhance-run-btn');
+  if (btn) { btn.disabled = false; btn.innerHTML = '<span class="ms sm" style="font-size:12px">auto_awesome</span> Enhance'; }
+}
+
+function closeEnhanceModal() {
+  document.getElementById('enhance-modal').classList.remove('show');
+  const btn = document.getElementById('enhance-run-btn');
+  if (btn) { btn.disabled = false; btn.innerHTML = '<span class="ms sm" style="font-size:12px">auto_awesome</span> Enhance'; }
+}
+
+function acceptEnhanced() {
+  const enhanced = document.getElementById('enhance-result').value.trim();
+  if (!enhanced) return;
+  if (_enhanceTarget === 'run') {
+    const ta = document.getElementById('run-input');
+    ta.value = enhanced;
+    autoResize(ta);
+  } else {
+    const ta = document.getElementById('commander-input');
+    ta.value = enhanced;
+    autoResize(ta);
+  }
+  closeEnhanceModal();
+}
+
 // ── Pipeline Templates ─────────────────────────────────────────────────────
 function showSavePipelineForm() {
   document.getElementById('save-pipeline-name').value = '';
@@ -2548,6 +2647,9 @@ window.addEventListener('message', e=>{
       break;
     case 'pipelineTemplates':
       renderPipelineTemplates(msg.templates);
+      break;
+    case 'enhancedPrompt':
+      showEnhanceModal(msg.original, msg.enhanced);
       break;
   }
 });

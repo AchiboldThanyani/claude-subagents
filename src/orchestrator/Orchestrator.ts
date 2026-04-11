@@ -266,6 +266,40 @@ export class Orchestrator extends EventEmitter {
     }
   }
 
+  // ── Prompt Enhancer ────────────────────────────────────────────────────────
+
+  async enhancePrompt(input: string, target: 'run' | 'commander'): Promise<void> {
+    const ENHANCER_SYSTEM = `You are a prompt engineer. Your only job is to rewrite a user's raw instruction into a clear, well-structured prompt for an AI coding agent.
+
+Rules:
+- Add relevant context and clarify the goal
+- Specify the expected output format if not stated
+- Remove ambiguity and vague language
+- Keep it concise — do not pad or over-explain
+- Return ONLY the improved prompt. No preamble, no explanation, no quotes around it.`;
+
+    const config: AgentConfig = {
+      id: makeId(),
+      name: 'Prompt Enhancer',
+      type: 'summarizer',
+      powers: [],
+      systemPrompt: ENHANCER_SYSTEM,
+    };
+
+    const fullInput = `Rewrite this prompt:\n\n${input}`;
+
+    const result = await runAgent(config, fullInput, {});
+
+    if (result.success && result.output.trim()) {
+      this.emit('message', {
+        type: 'enhancedPrompt',
+        original: input,
+        enhanced: result.output.trim(),
+        target,
+      } satisfies ExtToWebMsg);
+    }
+  }
+
   async continueCommander(nodeId: string, message: string, ctx?: EditorContext): Promise<void> {
     const node = this.nodes.get(nodeId);
     if (!node) throw new Error(`Node ${nodeId} not found`);

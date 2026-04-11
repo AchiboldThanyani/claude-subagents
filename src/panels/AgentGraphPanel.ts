@@ -304,6 +304,14 @@ export class AgentGraphPanel {
         break;
       }
 
+      case 'enhancePrompt': {
+        const { input, target } = msg;
+        if (!input.trim()) break;
+        this.orchestrator.enhancePrompt(input, target)
+          .catch((err: Error) => vscode.window.showErrorMessage(`Enhance error: ${err.message}`));
+        break;
+      }
+
       case 'runNegativeSpace': {
         const ctx = ContextManager.capture();
         this.orchestrator.runNegativeSpace(ctx, msg.model)

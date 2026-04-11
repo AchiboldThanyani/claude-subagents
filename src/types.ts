@@ -113,7 +113,8 @@ export type ExtToWebMsg =
   | { type: 'dna';           store: import('./dna/DNAManager').DNAStore }
   | { type: 'negativeSpace'; findings: NegativeSpaceFinding[]; nodeId: string; status: 'running' | 'done' | 'error'; stream?: string }
   | { type: 'knowledge';         entries: import('./knowledge/KnowledgeManager').KnowledgeEntry[] }
-  | { type: 'pipelineTemplates'; templates: import('./pipeline/PipelineTemplateManager').PipelineTemplate[] };
+  | { type: 'pipelineTemplates'; templates: import('./pipeline/PipelineTemplateManager').PipelineTemplate[] }
+  | { type: 'enhancedPrompt'; original: string; enhanced: string; target: 'run' | 'commander' };
 
 /** Messages sent from WebView → Extension Host */
 export type WebToExtMsg =
@@ -156,6 +157,7 @@ export type WebToExtMsg =
   | { type: 'savePipelineTemplate'; name: string; description: string }
   | { type: 'loadPipelineTemplate'; id: string }
   | { type: 'deletePipelineTemplate'; id: string }
+  | { type: 'enhancePrompt'; input: string; target: 'run' | 'commander' }
   | { type: 'requestDNA' }
   | { type: 'setDNA'; agentType: string; dna: import('./dna/DNAManager').AgentDNA }
   | { type: 'clearDNA'; agentType: string };
