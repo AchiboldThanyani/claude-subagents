@@ -772,6 +772,11 @@
           <span class="tab-count-pill" id="hist-count"></span>
           <button class="sm secondary" onclick="vscode.postMessage({type:'openHistory'})"><span class="ms sm">refresh</span></button>
         </div>
+        <div style="position:relative;margin-bottom:8px">
+          <span class="ms sm" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none">search</span>
+          <input id="hist-search" type="text" placeholder="Search history…" oninput="filterHistory()"
+            style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:6px 8px 6px 28px;color:var(--text);font-size:11px;font-family:inherit;box-sizing:border-box;outline:none">
+        </div>
         <div id="history-list"></div>
       </div>
 
@@ -1298,6 +1303,7 @@ function renderDetail() {
   const expandBtn = hasContent && node.status !== 'running'
     ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
         <button class="chat-expand-btn" onclick="openModal('${node.id}')"><span class="ms sm" style="font-size:12px">open_in_full</span> Expand</button>
+        <button class="chat-expand-btn" onclick="rerunNode('${node.id}')" title="Re-run with same input" style="background:rgba(124,106,247,.1);border-color:rgba(124,106,247,.3);color:var(--accent)"><span class="ms sm" style="font-size:12px">replay</span> Re-run</button>
         <button class="chat-expand-btn" onclick="saveToKnowledge()" title="Save output to Knowledge Base" style="background:var(--accent2)22;border-color:var(--accent2)44;color:var(--accent2)"><span class="ms sm" style="font-size:12px">bookmark_add</span> Save to KB</button>
       </div>`
     : '';
@@ -1347,6 +1353,20 @@ function renderDetail() {
 function copyOutput() {
   const node=nodes.get(selectedId); if(!node?.output) return;
   vscode.postMessage({type:'copyOutput',text:node.output});
+}
+
+function rerunNode(id) {
+  const node = nodes.get(id);
+  if (!node) return;
+  // Pre-fill the Run tab with this node's agent + input, then switch to it
+  if (node.type === 'custom' && node.customAgentId) {
+    selectAgentPicker('run', node.type, node.customAgentId);
+  } else {
+    selectAgentPicker('run', node.type);
+  }
+  const ta = document.getElementById('run-input');
+  if (ta && node.input) { ta.value = node.input; autoResize(ta); }
+  switchTab('run');
 }
 function applyDiff() {
   if(selectedId) vscode.postMessage({type:'applyDiff',nodeId:selectedId});
@@ -2055,16 +2075,35 @@ function submitSchedule() {
 }
 
 // ── History ────────────────────────────────────────────────────────────────
+let _historyEntries = [];
+
 function renderHistory(entries) {
-  const list  = document.getElementById('history-list');
+  _historyEntries = entries;
   const count = document.getElementById('hist-count');
   count.textContent = entries.length ? `${entries.length}` : '';
+  filterHistory();
+}
+
+function filterHistory() {
+  const q = (document.getElementById('hist-search')?.value || '').toLowerCase().trim();
+  const list = document.getElementById('history-list');
   list.innerHTML = '';
-  if (!entries.length) {
-    list.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--muted)"><span class="ms" style="font-size:32px;color:var(--border)">history</span><p style="margin-top:8px;font-size:11px">No runs yet</p></div>`;
+
+  const filtered = q
+    ? _historyEntries.filter(e =>
+        e.agentName.toLowerCase().includes(q) ||
+        e.agentType.toLowerCase().includes(q) ||
+        e.input.toLowerCase().includes(q) ||
+        e.output.toLowerCase().includes(q)
+      )
+    : _historyEntries;
+
+  if (!filtered.length) {
+    list.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--muted)"><span class="ms" style="font-size:32px;color:var(--border)">${q ? 'search_off' : 'history'}</span><p style="margin-top:8px;font-size:11px">${q ? 'No matches' : 'No runs yet'}</p></div>`;
     return;
   }
-  entries.slice(0, 100).forEach(e => {
+
+  filtered.slice(0, 100).forEach(e => {
     const d = document.createElement('div');
     d.className = 'hcard';
     const tc = TYPE_COLOR[e.agentType] || 'var(--text)';
@@ -2081,11 +2120,22 @@ function renderHistory(entries) {
       <div class="hcard-prompt">${esc(e.input.slice(0, 90))}</div>
       <div class="hcard-meta">
         <span class="hcard-dur"><span class="ms sm" style="font-size:11px">timer</span>${dur}</span>
+        <button onclick="event.stopPropagation();rerunFromHistory('${e.agentType}',this.dataset.input)" data-input="${esc(e.input)}"
+          style="margin-left:auto;background:rgba(124,106,247,.1);border:1px solid rgba(124,106,247,.25);color:var(--accent);border-radius:5px;padding:2px 7px;font-size:9px;cursor:pointer;display:flex;align-items:center;gap:3px">
+          <span class="ms sm" style="font-size:11px">replay</span> Re-run
+        </button>
       </div>
       <div class="hcard-output">${esc(e.output)}</div>`;
     d.onclick = () => d.classList.toggle('expanded');
     list.appendChild(d);
   });
+}
+
+function rerunFromHistory(agentType, input) {
+  selectAgentPicker('run', agentType);
+  const ta = document.getElementById('run-input');
+  if (ta) { ta.value = input; autoResize(ta); }
+  switchTab('run');
 }
 
 // ── Graph actions ──────────────────────────────────────────────────────────
