@@ -115,6 +115,7 @@ export type ExtToWebMsg =
   | { type: 'knowledge';         entries: import('./knowledge/KnowledgeManager').KnowledgeEntry[] }
   | { type: 'pipelineTemplates'; templates: import('./pipeline/PipelineTemplateManager').PipelineTemplate[] }
   | { type: 'enhancedPrompt'; original: string; enhanced: string; target: 'run' | 'commander' }
+  | { type: 'promptPreview'; preview: string; agentName: string }
   | { type: 'claudeFeed'; items: ClaudeFeedItem[]; status: 'loading' | 'done' | 'error'; error?: string };
 
 /** Messages sent from WebView → Extension Host */
@@ -159,6 +160,7 @@ export type WebToExtMsg =
   | { type: 'loadPipelineTemplate'; id: string }
   | { type: 'deletePipelineTemplate'; id: string }
   | { type: 'enhancePrompt'; input: string; target: 'run' | 'commander' }
+  | { type: 'previewPrompt'; agentType: AgentType; agentId?: string; input: string; useContext?: boolean; target: 'run' | 'commander' }
   | { type: 'requestClaudeFeed' }
   | { type: 'requestDNA' }
   | { type: 'setDNA'; agentType: string; dna: import('./dna/DNAManager').AgentDNA }

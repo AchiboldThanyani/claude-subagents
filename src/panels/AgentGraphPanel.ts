@@ -437,6 +437,14 @@ export class AgentGraphPanel {
         break;
       }
 
+      case 'previewPrompt': {
+        const ctx = msg.useContext ? ContextManager.capture() : undefined;
+        // agentType may be 'custom' from the webview — resolve to a real type via agentId
+        const agentType = msg.agentType === 'custom' ? 'custom' as import('../types').AgentType : msg.agentType;
+        this.orchestrator.buildPromptPreview(agentType, msg.agentId, msg.input, ctx, msg.target);
+        break;
+      }
+
       case 'requestClaudeFeed': {
         this.orchestrator.runClaudeFeed()
           .catch((err: Error) => vscode.window.showErrorMessage(`Feed error: ${err.message}`));

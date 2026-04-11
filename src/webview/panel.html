@@ -393,6 +393,9 @@
     <div id="commander-history" style="max-height:260px;overflow-y:auto;padding:10px 16px;display:flex;flex-direction:column;gap:8px"></div>
     <div style="padding:10px 12px 12px;position:relative">
       <textarea id="commander-input" placeholder='e.g. "Review auth.ts then write tests for any bugs found"' style="width:100%;min-height:52px;max-height:140px;background:rgba(249,226,175,.04);border:1px solid rgba(249,226,175,.2);border-radius:8px;padding:9px 80px 9px 12px;color:var(--text);font-family:'DM Sans',system-ui;font-size:13px;resize:none;box-sizing:border-box;outline:none" oninput="autoResize(this)" onkeydown="handleCommanderKey(event)"></textarea>
+      <button onclick="previewCommanderPrompt()" title="Preview full prompt" style="position:absolute;bottom:19px;right:92px;background:rgba(249,226,175,.08);border:1px solid rgba(249,226,175,.15);color:#f9e2af;border-radius:6px;height:30px;padding:0 7px;cursor:pointer;display:flex;align-items:center;gap:3px;font-size:10px">
+        <span class="ms sm" style="font-size:12px">preview</span>
+      </button>
       <button onclick="enhanceCommanderInput()" title="Enhance prompt" style="position:absolute;bottom:19px;right:56px;background:rgba(249,226,175,.15);border:1px solid rgba(249,226,175,.25);color:#f9e2af;border-radius:6px;height:30px;padding:0 7px;cursor:pointer;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700">
         <span class="ms sm" style="font-size:12px">auto_awesome</span>
       </button>
@@ -440,6 +443,27 @@
       <button onclick="acceptEnhanced()" style="flex:2;padding:8px;background:var(--accent);border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px">
         <span class="ms sm" style="font-size:14px">check</span> Use Enhanced Prompt
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Prompt Preview modal -->
+<div id="prompt-preview-modal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.65);align-items:center;justify-content:center">
+  <div style="width:min(680px,95vw);max-height:88vh;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.5);display:flex;flex-direction:column">
+    <div style="padding:12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <span class="ms sm" style="color:var(--accent)">preview</span>
+      <span style="font-size:13px;font-weight:600">Full Prompt Preview</span>
+      <span id="prompt-preview-agent" style="font-size:11px;color:var(--muted);margin-left:2px"></span>
+      <button onclick="closePromptPreview()" style="margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer"><span class="ms sm">close</span></button>
+    </div>
+    <div style="padding:6px 16px;background:rgba(124,106,247,.06);border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);flex-shrink:0">
+      This is the exact string sent to Claude — Constitution → DNA → Rules → Knowledge → Context → Your input
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:14px 16px">
+      <pre id="prompt-preview-body" style="font-family:'JetBrains Mono','Cascadia Code',monospace;font-size:10.5px;line-height:1.75;white-space:pre-wrap;word-break:break-word;color:var(--text);margin:0"></pre>
+    </div>
+    <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;flex-shrink:0">
+      <button onclick="closePromptPreview()" style="padding:7px 20px;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;font-size:12px">Close</button>
     </div>
   </div>
 </div>
@@ -688,6 +712,9 @@
         <div style="display:flex;gap:6px;margin-top:10px">
           <button onclick="addTemplateFromRun()" style="flex:1;padding:7px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;gap:5px" title="Add this agent to the canvas as a template (doesn't run yet)">
             <span class="ms sm">add_circle</span> Add to canvas
+          </button>
+          <button onclick="previewRunPrompt()" style="padding:7px 10px;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:7px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;gap:4px" title="Preview the full assembled prompt before running">
+            <span class="ms sm">preview</span>
           </button>
           <button id="run-btn" style="flex:1;padding:7px" onclick="submitRun()">
             <span class="run-btn-icon"><span class="ms sm">play_arrow</span> Run now</span>
@@ -1353,6 +1380,37 @@ function renderDetail() {
 function copyOutput() {
   const node=nodes.get(selectedId); if(!node?.output) return;
   vscode.postMessage({type:'copyOutput',text:node.output});
+}
+
+// ── Prompt Preview ───────────────────────────────────────────────────────────
+function previewRunPrompt() {
+  const input = document.getElementById('run-input').value.trim();
+  if (!input) { alert('Enter a prompt first.'); return; }
+  const useContext = document.getElementById('run-use-context')?.checked ?? true;
+  const agentId = selectedRunAgent === '__custom__'
+    ? (document.getElementById('run-custom-select')?.value || undefined)
+    : undefined;
+  const agentType = selectedRunAgent === '__custom__' ? 'custom' : selectedRunAgent;
+  vscode.postMessage({ type: 'previewPrompt', agentType, agentId, input, useContext, target: 'run' });
+}
+
+function previewCommanderPrompt() {
+  const input = document.getElementById('commander-input').value.trim();
+  if (!input) return;
+  vscode.postMessage({ type: 'previewPrompt', agentType: 'commander', input, useContext: true, target: 'commander' });
+}
+
+function showPromptPreview(preview, agentName) {
+  document.getElementById('prompt-preview-agent').textContent = agentName ? `— ${agentName}` : '';
+  document.getElementById('prompt-preview-body').textContent = preview || '(nothing was assembled — check that your input is not empty)';
+  const modal = document.getElementById('prompt-preview-modal');
+  modal.style.display = 'flex';
+  modal.style.alignItems = 'center';
+  modal.style.justifyContent = 'center';
+}
+
+function closePromptPreview() {
+  document.getElementById('prompt-preview-modal').style.display = 'none';
 }
 
 function rerunNode(id) {
@@ -2835,6 +2893,9 @@ window.addEventListener('message', e=>{
       break;
     case 'claudeFeed':
       handleFeedMessage(msg);
+      break;
+    case 'promptPreview':
+      showPromptPreview(msg.preview, msg.agentName);
       break;
   }
 });

@@ -324,6 +324,37 @@ Rules:
     }
   }
 
+  // ── Prompt Preview ─────────────────────────────────────────────────────────
+
+  buildPromptPreview(
+    agentType: AgentType,
+    agentId: string | undefined,
+    input: string,
+    ctx: EditorContext | undefined,
+    target: 'run' | 'commander',
+  ): void {
+    const agentConfig =
+      (agentId ? this.customAgents.find(a => a.id === agentId) : undefined) ??
+      BUILTIN_AGENTS.find(a => a.type === agentType) ??
+      this.customAgents.find(a => a.type === agentType);
+
+    const agentName = agentConfig?.name ?? agentType;
+
+    const constitutionBlock = this.constitution?.buildConstitutionBlock() ?? '';
+    const dnaBlock          = this.dna?.buildDNABlock(target === 'commander' ? 'commander' : agentType) ?? '';
+    const rulesBlock        = this.rules?.buildRulesBlock(target === 'commander' ? 'commander' : agentType) ?? '';
+    const knowledgeBlock    = this.knowledge?.buildKnowledgeBlock(target === 'commander' ? 'commander' : agentType, input) ?? '';
+    const contextBlock      = ctx ? ContextManager.buildContextBlock(ctx) : '';
+
+    const preview = constitutionBlock + dnaBlock + rulesBlock + knowledgeBlock + contextBlock + input;
+
+    this.emit('message', {
+      type: 'promptPreview',
+      preview,
+      agentName,
+    } satisfies ExtToWebMsg);
+  }
+
   // ── Claude Feed ────────────────────────────────────────────────────────────
 
   async runClaudeFeed(): Promise<void> {
