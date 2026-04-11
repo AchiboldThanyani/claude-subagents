@@ -3,10 +3,15 @@
   "displayName": "Claude Subagents",
   "description": "Visualise and orchestrate Claude subagents — plan, review, test, document and more",
   "version": "0.3.0",
-  "publisher": "achibold",
+  "publisher": "achibold-lukhwareni",
   "engines": { "vscode": "^1.85.0" },
   "icon": "media/icon.png",
   "categories": ["Other", "Machine Learning"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AchiboldThanyani/claude-subagents"
+  },
+  "license": "MIT",
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {

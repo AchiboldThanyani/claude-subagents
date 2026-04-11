@@ -105,6 +105,9 @@ export class AgentGraphPanel {
         if (this.orchestrator.knowledge) {
           this.panel.webview.postMessage({ type: 'knowledge', entries: this.orchestrator.knowledge.getAll() } satisfies ExtToWebMsg);
         }
+        if (this.orchestrator.pipelineTemplates) {
+          this.panel.webview.postMessage({ type: 'pipelineTemplates', templates: this.orchestrator.pipelineTemplates.getAll() } satisfies ExtToWebMsg);
+        }
         break;
       }
 
@@ -314,6 +317,40 @@ export class AgentGraphPanel {
         const ctx = ContextManager.capture();
         this.orchestrator.runDirect(finding.fixAgent, finding.fixInput, undefined, undefined, ctx)
           .catch((err: Error) => vscode.window.showErrorMessage(`Fix error: ${err.message}`));
+        break;
+      }
+
+      case 'requestPipelineTemplates': {
+        if (this.orchestrator.pipelineTemplates) {
+          this.panel.webview.postMessage({ type: 'pipelineTemplates', templates: this.orchestrator.pipelineTemplates.getAll() } satisfies ExtToWebMsg);
+        }
+        break;
+      }
+
+      case 'savePipelineTemplate': {
+        if (!this.orchestrator.pipelineTemplates) break;
+        const ok = this.orchestrator.saveCurrentPipelineAsTemplate(msg.name, msg.description);
+        if (ok) {
+          this.panel.webview.postMessage({ type: 'pipelineTemplates', templates: this.orchestrator.pipelineTemplates.getAll() } satisfies ExtToWebMsg);
+          vscode.window.showInformationMessage(`Pipeline "${msg.name}" saved.`);
+        } else {
+          vscode.window.showWarningMessage('No template nodes on canvas to save.');
+        }
+        break;
+      }
+
+      case 'loadPipelineTemplate': {
+        if (!this.orchestrator.pipelineTemplates) break;
+        const ctx = ContextManager.capture();
+        const ok = this.orchestrator.loadPipelineTemplate(msg.id, ctx);
+        if (!ok) vscode.window.showWarningMessage('Pipeline template not found.');
+        break;
+      }
+
+      case 'deletePipelineTemplate': {
+        if (!this.orchestrator.pipelineTemplates) break;
+        this.orchestrator.pipelineTemplates.remove(msg.id);
+        this.panel.webview.postMessage({ type: 'pipelineTemplates', templates: this.orchestrator.pipelineTemplates.getAll() } satisfies ExtToWebMsg);
         break;
       }
 

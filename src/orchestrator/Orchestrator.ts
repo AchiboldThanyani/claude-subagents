@@ -11,6 +11,7 @@ import { RulesManager } from '../rules/RulesManager';
 import { ConstitutionManager } from '../constitution/ConstitutionManager';
 import { DNAManager } from '../dna/DNAManager';
 import { KnowledgeManager } from '../knowledge/KnowledgeManager';
+import { PipelineTemplateManager } from '../pipeline/PipelineTemplateManager';
 
 function makeId(): string {
   return (crypto as unknown as { randomUUID: () => string }).randomUUID?.() ??
@@ -56,6 +57,7 @@ export class Orchestrator extends EventEmitter {
   constitution: ConstitutionManager | undefined;
   dna: DNAManager | undefined;
   knowledge: KnowledgeManager | undefined;
+  pipelineTemplates: PipelineTemplateManager | undefined;
 
   constructor(historyManager: HistoryManager, storageDir?: string) {
     super();
@@ -68,6 +70,7 @@ export class Orchestrator extends EventEmitter {
       this.constitution = new ConstitutionManager(storageDir);
       this.dna = new DNAManager(storageDir);
       this.knowledge = new KnowledgeManager(storageDir);
+      this.pipelineTemplates = new PipelineTemplateManager(storageDir);
     }
   }
 
@@ -443,6 +446,65 @@ export class Orchestrator extends EventEmitter {
 
   getPipelineEdges(): Array<{ from: string; to: string }> {
     return [...this.pipelineEdges];
+  }
+
+  // ── Pipeline Templates ─────────────────────────────────────────────────────
+
+  saveCurrentPipelineAsTemplate(name: string, description: string): boolean {
+    if (!this.pipelineTemplates) return false;
+    const templateNodes = [...this.nodes.values()].filter(n => n.isTemplate);
+    if (templateNodes.length === 0) return false;
+
+    // Map node ids to step indices
+    const idToIndex = new Map<string, number>();
+    templateNodes.forEach((n, i) => idToIndex.set(n.id, i));
+
+    const steps = templateNodes.map(n => ({
+      agentType: n.type,
+      customAgentId: n.customAgentId,
+      prompt: n.input,
+    }));
+
+    const edges = this.pipelineEdges
+      .filter(e => idToIndex.has(e.from) && idToIndex.has(e.to))
+      .map(e => ({ from: idToIndex.get(e.from)!, to: idToIndex.get(e.to)! }));
+
+    this.pipelineTemplates.save_template(name, description, steps, edges);
+    return true;
+  }
+
+  loadPipelineTemplate(templateId: string, ctx?: EditorContext): boolean {
+    if (!this.pipelineTemplates) return false;
+    const template = this.pipelineTemplates.get(templateId);
+    if (!template) return false;
+
+    // Clear existing templates from canvas
+    for (const node of [...this.nodes.values()].filter(n => n.isTemplate)) {
+      this.nodes.delete(node.id);
+      this.emit('message', { type: 'removeNode', id: node.id } satisfies ExtToWebMsg);
+    }
+    this.pipelineEdges = this.pipelineEdges.filter(e => {
+      const from = this.nodes.get(e.from);
+      const to   = this.nodes.get(e.to);
+      return from && to; // keep only edges between live nodes
+    });
+
+    // Recreate template nodes
+    const newIds: string[] = [];
+    for (const step of template.steps) {
+      const agentType = step.agentType as AgentType;
+      const node = this.addTemplate(agentType, step.customAgentId, step.prompt, ctx);
+      newIds.push(node.id);
+    }
+
+    // Recreate edges using new node ids
+    for (const edge of template.edges) {
+      const fromId = newIds[edge.from];
+      const toId   = newIds[edge.to];
+      if (fromId && toId) this.addPipelineEdge(fromId, toId);
+    }
+
+    return true;
   }
 
   async runPipeline(ctx?: EditorContext, model?: string): Promise<void> {
