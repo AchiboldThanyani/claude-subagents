@@ -114,7 +114,8 @@ export type ExtToWebMsg =
   | { type: 'negativeSpace'; findings: NegativeSpaceFinding[]; nodeId: string; status: 'running' | 'done' | 'error'; stream?: string }
   | { type: 'knowledge';         entries: import('./knowledge/KnowledgeManager').KnowledgeEntry[] }
   | { type: 'pipelineTemplates'; templates: import('./pipeline/PipelineTemplateManager').PipelineTemplate[] }
-  | { type: 'enhancedPrompt'; original: string; enhanced: string; target: 'run' | 'commander' };
+  | { type: 'enhancedPrompt'; original: string; enhanced: string; target: 'run' | 'commander' }
+  | { type: 'claudeFeed'; items: ClaudeFeedItem[]; status: 'loading' | 'done' | 'error'; error?: string };
 
 /** Messages sent from WebView → Extension Host */
 export type WebToExtMsg =
@@ -158,9 +159,17 @@ export type WebToExtMsg =
   | { type: 'loadPipelineTemplate'; id: string }
   | { type: 'deletePipelineTemplate'; id: string }
   | { type: 'enhancePrompt'; input: string; target: 'run' | 'commander' }
+  | { type: 'requestClaudeFeed' }
   | { type: 'requestDNA' }
   | { type: 'setDNA'; agentType: string; dna: import('./dna/DNAManager').AgentDNA }
   | { type: 'clearDNA'; agentType: string };
+
+export interface ClaudeFeedItem {
+  title: string;
+  date: string;
+  summary: string;
+  url: string;
+}
 
 export interface NegativeSpaceFinding {
   category: 'missing-tests' | 'missing-docs' | 'missing-error-handling' | 'missing-validation' | 'missing-types' | 'missing-comments' | 'other';

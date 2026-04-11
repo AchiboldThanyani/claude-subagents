@@ -255,6 +255,30 @@ export class Orchestrator extends EventEmitter {
     return this.nodes.get(node.id)!;
   }
 
+  /** Extract the first balanced JSON array from free-form text. */
+  private extractJsonArray(text: string): string | null {
+    // Find the first `[` that's followed by optional whitespace and `{` (likely a JSON array of objects)
+    const startMatch = text.match(/\[\s*\{/);
+    if (!startMatch || startMatch.index === undefined) return null;
+    const start = startMatch.index;
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = start; i < text.length; i++) {
+      const c = text[i];
+      if (escape) { escape = false; continue; }
+      if (c === '\\') { escape = true; continue; }
+      if (c === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (c === '[') depth++;
+      else if (c === ']') {
+        depth--;
+        if (depth === 0) return text.slice(start, i + 1);
+      }
+    }
+    return null;
+  }
+
   private parseNegativeSpaceFindings(output: string): import('../types').NegativeSpaceFinding[] {
     const match = output.match(/```findings\s*([\s\S]*?)```/);
     if (!match) return [];
@@ -298,6 +322,101 @@ Rules:
         target,
       } satisfies ExtToWebMsg);
     }
+  }
+
+  // ── Claude Feed ────────────────────────────────────────────────────────────
+
+  async runClaudeFeed(): Promise<void> {
+    const FEED_SYSTEM = `You are a research assistant that tracks the latest news and updates from Anthropic and Claude.
+Your ONLY job is to search the web for recent Anthropic / Claude announcements from the last 60 days and return them as structured JSON.
+
+Search these sources:
+- anthropic.com/news
+- anthropic.com/blog
+- Claude Code changelog and release notes
+- Claude model release announcements
+
+You MUST respond with ONLY a raw JSON array — no intro text, no explanation, no markdown prose. Start your response with [ and end with ].
+
+Example format:
+[
+  {
+    "title": "Article or announcement title",
+    "date": "YYYY-MM-DD",
+    "summary": "1-2 sentence summary of what is new or changed.",
+    "url": "https://full-url"
+  }
+]
+
+Include at most 12 items, newest first. If a URL is not available use an empty string. Do NOT write anything before or after the JSON array.`;
+
+    const config: AgentConfig = {
+      id: makeId(),
+      name: 'Claude Feed',
+      type: 'researcher',
+      powers: ['web'],
+      systemPrompt: FEED_SYSTEM,
+      model: 'claude-haiku-4-5-20251001',
+    };
+
+    // Emit loading state
+    this.emit('message', {
+      type: 'claudeFeed',
+      items: [],
+      status: 'loading',
+    } satisfies import('../types').ExtToWebMsg);
+
+    const input = 'Search for the latest Anthropic and Claude news, model releases, and product updates from the last 60 days. Return results as JSON as instructed.';
+    const result = await runAgent(config, input, {});
+
+    if (!result.success) {
+      this.emit('message', {
+        type: 'claudeFeed',
+        items: [],
+        status: 'error',
+        error: result.error ?? 'Researcher agent failed',
+      } satisfies import('../types').ExtToWebMsg);
+      return;
+    }
+
+    // Parse JSON — try fenced block, then bracket-aware array extraction
+    let items: import('../types').ClaudeFeedItem[] = [];
+    const candidates: string[] = [];
+    const fenced = result.output.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenced) candidates.push(fenced[1].trim());
+    const extracted = this.extractJsonArray(result.output);
+    if (extracted) candidates.push(extracted);
+
+    let parseErr: string | undefined;
+    for (const raw of candidates) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          items = parsed as import('../types').ClaudeFeedItem[];
+          parseErr = undefined;
+          break;
+        }
+      } catch (e) {
+        parseErr = (e as Error).message;
+      }
+    }
+
+    if (candidates.length === 0 || (parseErr && items.length === 0)) {
+      const preview = result.output.slice(0, 300).replace(/\s+/g, ' ').trim();
+      this.emit('message', {
+        type: 'claudeFeed',
+        items: [],
+        status: 'error',
+        error: `Could not parse feed. Output preview: ${preview || '(empty)'}`,
+      } satisfies import('../types').ExtToWebMsg);
+      return;
+    }
+
+    this.emit('message', {
+      type: 'claudeFeed',
+      items,
+      status: 'done',
+    } satisfies import('../types').ExtToWebMsg);
   }
 
   async continueCommander(nodeId: string, message: string, ctx?: EditorContext): Promise<void> {

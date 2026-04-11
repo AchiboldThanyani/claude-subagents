@@ -437,6 +437,12 @@ export class AgentGraphPanel {
         break;
       }
 
+      case 'requestClaudeFeed': {
+        this.orchestrator.runClaudeFeed()
+          .catch((err: Error) => vscode.window.showErrorMessage(`Feed error: ${err.message}`));
+        break;
+      }
+
       case 'selectNode':
         break;
     }
