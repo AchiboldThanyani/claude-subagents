@@ -689,7 +689,7 @@
       </div>
 
       <!-- CONSTITUTION -->
-      <div id="panel-constitution" style="display:none;height:100%;display:none;flex-direction:column">
+      <div id="panel-constitution" style="display:none;height:100%;flex-direction:column">
         <div class="tab-header">
           <span class="tab-header-title"><span class="ms sm">gavel</span> Constitution</span>
           <div style="display:flex;gap:4px">
@@ -1391,8 +1391,12 @@ function renderNSFindings(findings, status, stream) {
 function fixFinding(index) {
   const findings = window._nsFindings;
   if (!findings || !findings[index]) return;
-  vscode.postMessage({ type: 'fixFinding', finding: findings[index] });
+  const f = findings[index];
+  vscode.postMessage({ type: 'fixFinding', finding: f });
   closeNSOverlay();
+  // Switch to detail tab so user sees the agent spawn on canvas
+  switchTab('detail');
+  appendLog(`Spawning ${f.fixAgent} to fix: ${f.title}`, 'info');
 }
 
 let tplDebounce = null;
@@ -2008,11 +2012,16 @@ function toggleDNACard(type) {
 }
 
 function saveAgentDNA(type) {
-  const tone      = document.getElementById('dna-tone-' + type)?.value || undefined;
-  const verbosity = document.getElementById('dna-verbosity-' + type)?.value || undefined;
-  const focus     = document.getElementById('dna-focus-' + type)?.value.trim() || undefined;
-  const persona   = document.getElementById('dna-persona-' + type)?.value.trim() || undefined;
-  vscode.postMessage({ type: 'setDNA', agentType: type, dna: { tone, verbosity, focus, persona } });
+  const toneVal     = document.getElementById('dna-tone-' + type)?.value;
+  const verbVal     = document.getElementById('dna-verbosity-' + type)?.value;
+  const focusVal    = document.getElementById('dna-focus-' + type)?.value.trim();
+  const personaVal  = document.getElementById('dna-persona-' + type)?.value.trim();
+  const dna = {};
+  if (toneVal)    dna.tone      = toneVal;
+  if (verbVal)    dna.verbosity = verbVal;
+  if (focusVal)   dna.focus     = focusVal;
+  if (personaVal) dna.persona   = personaVal;
+  vscode.postMessage({ type: 'setDNA', agentType: type, dna });
   dnaExpanded = null;
 }
 
