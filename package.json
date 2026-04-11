@@ -5,6 +5,7 @@
   "version": "0.2.0",
   "publisher": "achibold",
   "engines": { "vscode": "^1.85.0" },
+  "icon": "media/icon.png",
   "categories": ["Other", "Machine Learning"],
   "activationEvents": [],
   "main": "./out/extension.js",
