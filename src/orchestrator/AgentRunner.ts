@@ -8,6 +8,7 @@ export interface RunOptions {
   resume?: string;
   idleTimeout?: number;   // ms — overrides SILENCE_IDLE
   toolTimeout?: number;   // ms — overrides SILENCE_TOOL_USE
+  onWriteReady?: (write: (text: string) => void) => void; // called once PTY is ready to accept input
 }
 
 const SILENCE_IDLE     = 45_000;
@@ -258,6 +259,12 @@ export async function runAgent(
           promptSent = true;
           term.write(input + '\r');
           resetSilence();
+          // Expose PTY write handle so callers can send follow-up input
+          opts.onWriteReady?.((text: string) => {
+            if (finished) return;
+            term.write(text + '\r');
+            resetSilence();
+          });
         }, 4000);
       }
     });

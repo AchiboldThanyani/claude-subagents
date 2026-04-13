@@ -260,6 +260,14 @@ export class AgentGraphPanel {
         break;
       }
 
+      case 'sendInput': {
+        const { nodeId, text } = msg;
+        if (!text.trim()) return;
+        const sent = this.orchestrator.sendInputToNode(nodeId, text);
+        if (!sent) vscode.window.showWarningMessage('Agent is not running — use Continue to resume.');
+        break;
+      }
+
       case 'openHistory': {
         this.panel.webview.postMessage({ type: 'history', entries: this.history.getAll() } satisfies ExtToWebMsg);
         break;

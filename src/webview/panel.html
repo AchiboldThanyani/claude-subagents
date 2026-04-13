@@ -1408,12 +1408,13 @@ function renderDetail() {
       <span class="ms sm">stop_circle</span> Stop Agent
     </button>` : '';
 
-  const composeHtml = node.status !== 'running' ? `
-    <div class="conv-compose" style="margin-top:10px">
-      <textarea id="conv-input-${node.id}" placeholder="Follow up…" onkeydown="handleConvKey(event,'${node.id}')" oninput="autoResize(this)"></textarea>
+  const isRunning = node.status === 'running';
+  const composeHtml = `
+    <div class="conv-compose" style="margin-top:10px" data-node-running="${isRunning}">
+      <textarea id="conv-input-${node.id}" placeholder="${isRunning ? 'Reply to Claude…' : 'Follow up…'}" onkeydown="handleConvKey(event,'${node.id}')" oninput="autoResize(this)"></textarea>
       <button class="conv-compose-send" onclick="sendContinue('${node.id}')"><span class="ms sm">send</span></button>
     </div>
-    <div class="conv-hint">Ctrl+Enter to send</div>` : '';
+    <div class="conv-hint">${isRunning ? '<span class="ms sm" style="color:var(--accent);vertical-align:middle">terminal</span> Live session — Ctrl+Enter to send' : 'Ctrl+Enter to send'}</div>`;
 
   detail.innerHTML = `
     <div class="detail-hero">
@@ -2015,14 +2016,19 @@ function runPipelineBtn() {
 function sendContinue(nodeId) {
   const input = document.getElementById('conv-input-' + nodeId);
   if (!input) return;
-  const message = input.value.trim();
-  if (!message) return;
+  const text = input.value.trim();
+  if (!text) return;
   input.value = '';
-  vscode.postMessage({ type: 'continueConversation', nodeId, message });
+  autoResize(input);
+  const node = nodes.get(nodeId);
+  if (node?.status === 'running') {
+    vscode.postMessage({ type: 'sendInput', nodeId, text });
+  } else {
+    vscode.postMessage({ type: 'continueConversation', nodeId, message: text });
+  }
 }
 
 function handleConvKey(e, nodeId) {
-  // Ctrl+Enter or Cmd+Enter to send
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     sendContinue(nodeId);

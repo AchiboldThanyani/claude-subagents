@@ -48,6 +48,7 @@ interface Plan {
 export class Orchestrator extends EventEmitter {
   private nodes = new Map<string, AgentNode>();
   private abortControllers = new Map<string, AbortController>();
+  private ptyWriters = new Map<string, (text: string) => void>();
   private customAgents: AgentConfig[] = [];
   private scheduledJobs = new Map<string, ReturnType<typeof setInterval>>();
   private activeCount = 0;
@@ -941,6 +942,19 @@ Do not ask for confirmation. Do not explain what you are doing. Just search, wri
     this.abortControllers.get(id)?.abort();
   }
 
+  sendInputToNode(nodeId: string, text: string): boolean {
+    const write = this.ptyWriters.get(nodeId);
+    if (!write) return false;
+    write(text);
+    // Record in messages so UI shows what was sent
+    const node = this.nodes.get(nodeId);
+    if (node) {
+      node.messages.push({ role: 'user', text, timestamp: Date.now() });
+      this.updateNode(nodeId, { messages: node.messages });
+    }
+    return true;
+  }
+
   async runDirect(
     agentType: AgentType,
     input: string,
@@ -1196,8 +1210,12 @@ Do not ask for confirmation. Do not explain what you are doing. Just search, wri
         streamAccum += chunk;
         this.updateNode(node.id, { streamBuffer: streamAccum });
       },
+      onWriteReady: (write) => {
+        this.ptyWriters.set(node.id, write);
+      },
     });
 
+    this.ptyWriters.delete(node.id);
     this.abortControllers.delete(node.id);
     this.bumpActive(-1);
 

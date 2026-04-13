@@ -136,6 +136,7 @@ export type WebToExtMsg =
   | { type: 'addEdge';       from: string; to: string }
   | { type: 'scheduleAgent'; agentType: AgentType; cronExpr: string; input: string }
   | { type: 'continueConversation'; nodeId: string; message: string }
+  | { type: 'sendInput'; nodeId: string; text: string }
   | { type: 'requestMemory' }
   | { type: 'requestUsage' }
   | { type: 'addTemplate';       agentType: AgentType; customAgentId?: string; prompt?: string }
