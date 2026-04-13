@@ -12,6 +12,7 @@ import { ConstitutionManager } from '../constitution/ConstitutionManager';
 import { DNAManager } from '../dna/DNAManager';
 import { KnowledgeManager } from '../knowledge/KnowledgeManager';
 import { PipelineTemplateManager } from '../pipeline/PipelineTemplateManager';
+import { NotesManager } from '../notes/NotesManager';
 
 function makeId(): string {
   return (crypto as unknown as { randomUUID: () => string }).randomUUID?.() ??
@@ -58,6 +59,7 @@ export class Orchestrator extends EventEmitter {
   dna: DNAManager | undefined;
   knowledge: KnowledgeManager | undefined;
   pipelineTemplates: PipelineTemplateManager | undefined;
+  notes: NotesManager | undefined;
 
   constructor(historyManager: HistoryManager, storageDir?: string) {
     super();
@@ -71,6 +73,7 @@ export class Orchestrator extends EventEmitter {
       this.dna = new DNAManager(storageDir);
       this.knowledge = new KnowledgeManager(storageDir);
       this.pipelineTemplates = new PipelineTemplateManager(storageDir);
+      this.notes = new NotesManager(storageDir);
     }
   }
 
@@ -353,6 +356,133 @@ Rules:
       preview,
       agentName,
     } satisfies ExtToWebMsg);
+  }
+
+  // ── Notes agent helpers ────────────────────────────────────────────────────
+
+  async agentBreakdownNote(noteId: string, model?: string): Promise<void> {
+    if (!this.notes) return;
+    const note = this.notes.get(noteId);
+    if (!note) return;
+
+    const config: AgentConfig = {
+      id: makeId(),
+      name: `Break down: ${note.title}`,
+      type: 'planner',
+      powers: [],
+      systemPrompt: `You are a task planning assistant. The user gives you a note (title + body).
+Your job is to break it down into a list of concrete, actionable todo items.
+You MUST respond with ONLY a raw JSON array of strings. Start with [ and end with ].
+No explanation, no prose, no markdown, no code fences.
+Example: ["Set up database schema","Write migration script","Add unit tests"]`,
+      ...(model ? { model } : {}),
+    };
+
+    const input = `Note title: ${note.title}\n\nNote body:\n${note.body || '(no body — use the title to infer tasks)'}`;
+
+    // Run as a visible node so user sees progress
+    const ctx = ContextManager.capture();
+    const node = this.createNode(config, input, undefined, ctx);
+    this.updateNode(node.id, { status: 'running', startTime: Date.now() });
+    const ctrl = new AbortController();
+    this.abortControllers.set(node.id, ctrl);
+    this.bumpActive(1);
+
+    let streamAccum = '';
+    const result = await runAgent(config, input, {
+      signal: ctrl.signal,
+      onStream: (chunk) => {
+        streamAccum += chunk;
+        this.updateNode(node.id, { streamBuffer: streamAccum });
+      },
+    });
+
+    this.abortControllers.delete(node.id);
+    this.bumpActive(-1);
+    this.updateNode(node.id, {
+      status: result.success ? 'done' : 'error',
+      output: result.output,
+      error: result.error,
+      streamBuffer: undefined,
+      endTime: Date.now(),
+    });
+
+    if (!result.success) return;
+
+    // Extract JSON array — handles both string arrays ["a","b"] and object arrays [{...}]
+    const raw = result.output;
+    const startIdx = raw.indexOf('[');
+    const endIdx = raw.lastIndexOf(']');
+    if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) return;
+
+    try {
+      const parsed = JSON.parse(raw.slice(startIdx, endIdx + 1));
+      if (!Array.isArray(parsed)) return;
+      const todos = parsed.map((item: unknown) =>
+        typeof item === 'string' ? item : String(item)
+      ).filter(Boolean);
+      if (!todos.length) return;
+      this.notes.setTodosFromAgent(noteId, todos);
+      this.emit('message', { type: 'notes', notes: this.notes.getAll() } satisfies ExtToWebMsg);
+    } catch { /* malformed JSON — silently ignore */ }
+  }
+
+  async agentRunTodo(noteId: string, todoId: string, model?: string): Promise<void> {
+    if (!this.notes) return;
+    const note = this.notes.get(noteId);
+    if (!note) return;
+    const todo = note.todos.find(t => t.id === todoId);
+    if (!todo) return;
+
+    // Pick a sensible agent type based on keywords
+    let agentType: AgentType = 'coder';
+    const t = todo.text.toLowerCase();
+    if (t.includes('test'))       agentType = 'test-writer';
+    else if (t.includes('doc'))   agentType = 'docs-writer';
+    else if (t.includes('bug') || t.includes('fix')) agentType = 'bug-finder';
+    else if (t.includes('refactor')) agentType = 'refactor';
+    else if (t.includes('review'))   agentType = 'code-review';
+    else if (t.includes('commit'))   agentType = 'git-commit';
+    else if (t.includes('plan'))     agentType = 'planner';
+
+    const template = BUILTIN_AGENTS.find(a => a.type === agentType)!;
+    const config: AgentConfig = { ...template, id: makeId(), ...(model ? { model } : {}) };
+    const ctx = ContextManager.capture();
+    await this.runNodeAgent(
+      this.createNode(config, todo.text, undefined, ctx),
+      todo.text,
+      ctx,
+    );
+  }
+
+  async agentWhatsNext(model?: string): Promise<void> {
+    if (!this.notes) return;
+    const allNotes = this.notes.getAll();
+    if (!allNotes.length) return;
+
+    const summary = allNotes.map(n => {
+      const todos = n.todos.map(t => `  [${t.done ? 'x' : ' '}] ${t.text}`).join('\n');
+      return `### ${n.title}\n${n.body || ''}\n${todos ? `\nTodos:\n${todos}` : ''}`;
+    }).join('\n\n---\n\n');
+
+    const config: AgentConfig = {
+      id: makeId(),
+      name: "What's Next",
+      type: 'planner',
+      powers: [],
+      systemPrompt: `You are a helpful development coach. The user shows you their notes and todos.
+Analyse what's done, what's pending, and what looks most important.
+Give a short, actionable recommendation: what should they work on next and why.
+Be direct and concrete. 3-5 sentences max.`,
+      ...(model ? { model } : {}),
+    };
+
+    const ctx = ContextManager.capture();
+    await this.runNodeAgent(
+      this.createNode(config, summary, undefined, ctx),
+      summary,
+      ctx,
+    );
   }
 
   // ── Claude Feed ────────────────────────────────────────────────────────────

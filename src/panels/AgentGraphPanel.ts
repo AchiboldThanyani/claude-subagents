@@ -108,6 +108,9 @@ export class AgentGraphPanel {
         if (this.orchestrator.pipelineTemplates) {
           this.panel.webview.postMessage({ type: 'pipelineTemplates', templates: this.orchestrator.pipelineTemplates.getAll() } satisfies ExtToWebMsg);
         }
+        if (this.orchestrator.notes) {
+          this.panel.webview.postMessage({ type: 'notes', notes: this.orchestrator.notes.getAll() } satisfies ExtToWebMsg);
+        }
         break;
       }
 
@@ -434,6 +437,75 @@ export class AgentGraphPanel {
         const c = this.orchestrator.constitution;
         this.panel.webview.postMessage({ type: 'constitution', content: '', info: c.getInfo() } satisfies ExtToWebMsg);
         vscode.window.showInformationMessage('Constitution cleared.');
+        break;
+      }
+
+      case 'requestNotes': {
+        if (this.orchestrator.notes) {
+          this.panel.webview.postMessage({ type: 'notes', notes: this.orchestrator.notes.getAll() } satisfies ExtToWebMsg);
+        }
+        break;
+      }
+      case 'addNote': {
+        if (!this.orchestrator.notes) break;
+        this.orchestrator.notes.add(msg.title, msg.body);
+        this.panel.webview.postMessage({ type: 'notes', notes: this.orchestrator.notes.getAll() } satisfies ExtToWebMsg);
+        break;
+      }
+      case 'updateNote': {
+        if (!this.orchestrator.notes) break;
+        this.orchestrator.notes.update(msg.id, { title: msg.title, body: msg.body });
+        this.panel.webview.postMessage({ type: 'notes', notes: this.orchestrator.notes.getAll() } satisfies ExtToWebMsg);
+        break;
+      }
+      case 'deleteNote': {
+        if (!this.orchestrator.notes) break;
+        this.orchestrator.notes.remove(msg.id);
+        this.panel.webview.postMessage({ type: 'notes', notes: this.orchestrator.notes.getAll() } satisfies ExtToWebMsg);
+        break;
+      }
+      case 'addTodo': {
+        if (!this.orchestrator.notes) break;
+        this.orchestrator.notes.addTodo(msg.noteId, msg.text);
+        this.panel.webview.postMessage({ type: 'notes', notes: this.orchestrator.notes.getAll() } satisfies ExtToWebMsg);
+        break;
+      }
+      case 'toggleTodo': {
+        if (!this.orchestrator.notes) break;
+        this.orchestrator.notes.toggleTodo(msg.noteId, msg.todoId);
+        this.panel.webview.postMessage({ type: 'notes', notes: this.orchestrator.notes.getAll() } satisfies ExtToWebMsg);
+        break;
+      }
+      case 'removeTodo': {
+        if (!this.orchestrator.notes) break;
+        this.orchestrator.notes.removeTodo(msg.noteId, msg.todoId);
+        this.panel.webview.postMessage({ type: 'notes', notes: this.orchestrator.notes.getAll() } satisfies ExtToWebMsg);
+        break;
+      }
+      case 'editTodo': {
+        if (!this.orchestrator.notes) break;
+        this.orchestrator.notes.editTodo(msg.noteId, msg.todoId, msg.text);
+        this.panel.webview.postMessage({ type: 'notes', notes: this.orchestrator.notes.getAll() } satisfies ExtToWebMsg);
+        break;
+      }
+      case 'agentBreakdown': {
+        this.orchestrator.agentBreakdownNote(msg.noteId, msg.model)
+          .then(() => {
+            if (this.orchestrator.notes) {
+              this.panel.webview.postMessage({ type: 'notes', notes: this.orchestrator.notes.getAll() } satisfies ExtToWebMsg);
+            }
+          })
+          .catch((err: Error) => vscode.window.showErrorMessage(`Breakdown error: ${err.message}`));
+        break;
+      }
+      case 'agentRunTodo': {
+        this.orchestrator.agentRunTodo(msg.noteId, msg.todoId, msg.model)
+          .catch((err: Error) => vscode.window.showErrorMessage(`Run todo error: ${err.message}`));
+        break;
+      }
+      case 'agentWhatsNext': {
+        this.orchestrator.agentWhatsNext(msg.model)
+          .catch((err: Error) => vscode.window.showErrorMessage(`What's next error: ${err.message}`));
         break;
       }
 

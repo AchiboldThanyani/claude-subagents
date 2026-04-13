@@ -116,6 +116,7 @@ export type ExtToWebMsg =
   | { type: 'pipelineTemplates'; templates: import('./pipeline/PipelineTemplateManager').PipelineTemplate[] }
   | { type: 'enhancedPrompt'; original: string; enhanced: string; target: 'run' | 'commander' }
   | { type: 'promptPreview'; preview: string; agentName: string }
+  | { type: 'notes'; notes: import('./notes/NotesManager').Note[] }
   | { type: 'claudeFeed'; items: ClaudeFeedItem[]; status: 'loading' | 'done' | 'error'; error?: string };
 
 /** Messages sent from WebView → Extension Host */
@@ -162,6 +163,17 @@ export type WebToExtMsg =
   | { type: 'enhancePrompt'; input: string; target: 'run' | 'commander' }
   | { type: 'previewPrompt'; agentType: AgentType; agentId?: string; input: string; useContext?: boolean; target: 'run' | 'commander' }
   | { type: 'requestClaudeFeed' }
+  | { type: 'requestNotes' }
+  | { type: 'addNote'; title: string; body: string }
+  | { type: 'updateNote'; id: string; title: string; body: string }
+  | { type: 'deleteNote'; id: string }
+  | { type: 'addTodo'; noteId: string; text: string }
+  | { type: 'toggleTodo'; noteId: string; todoId: string }
+  | { type: 'removeTodo'; noteId: string; todoId: string }
+  | { type: 'editTodo'; noteId: string; todoId: string; text: string }
+  | { type: 'agentBreakdown'; noteId: string; model?: string }
+  | { type: 'agentRunTodo'; noteId: string; todoId: string; model?: string }
+  | { type: 'agentWhatsNext'; model?: string }
   | { type: 'requestDNA' }
   | { type: 'setDNA'; agentType: string; dna: import('./dna/DNAManager').AgentDNA }
   | { type: 'clearDNA'; agentType: string };
