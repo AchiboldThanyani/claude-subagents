@@ -49,6 +49,7 @@ export class Orchestrator extends EventEmitter {
   private nodes = new Map<string, AgentNode>();
   private abortControllers = new Map<string, AbortController>();
   private ptyWriters = new Map<string, (text: string) => void>();
+  private enhanceCache = new Map<string, string>();
   private customAgents: AgentConfig[] = [];
   private scheduledJobs = new Map<string, ReturnType<typeof setInterval>>();
   private activeCount = 0;
@@ -297,6 +298,20 @@ export class Orchestrator extends EventEmitter {
   // ── Prompt Enhancer ────────────────────────────────────────────────────────
 
   async enhancePrompt(input: string, target: 'run' | 'commander'): Promise<void> {
+    const cacheKey = input.trim();
+
+    // Return cached result immediately if available
+    const cached = this.enhanceCache.get(cacheKey);
+    if (cached) {
+      this.emit('message', {
+        type: 'enhancedPrompt',
+        original: input,
+        enhanced: cached,
+        target,
+      } satisfies ExtToWebMsg);
+      return;
+    }
+
     const ENHANCER_SYSTEM = `You are a prompt engineer. Your only job is to rewrite a user's raw instruction into a clear, well-structured prompt for an AI coding agent.
 
 Rules:
@@ -312,17 +327,23 @@ Rules:
       type: 'summarizer',
       powers: [],
       systemPrompt: ENHANCER_SYSTEM,
+      model: 'claude-haiku-4-5-20251001',
     };
 
     const fullInput = `Rewrite this prompt:\n\n${input}`;
 
-    const result = await runAgent(config, fullInput, {});
+    const result = await runAgent(config, fullInput, {
+      idleTimeout: 10_000,
+      toolTimeout: 10_000,
+    });
 
     if (result.success && result.output.trim()) {
+      const enhanced = result.output.trim();
+      this.enhanceCache.set(cacheKey, enhanced);
       this.emit('message', {
         type: 'enhancedPrompt',
         original: input,
-        enhanced: result.output.trim(),
+        enhanced,
         target,
       } satisfies ExtToWebMsg);
     }
